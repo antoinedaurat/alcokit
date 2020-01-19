@@ -4,6 +4,21 @@ from librosa.core.spectrum import griffinlim
 import matplotlib.pyplot as plt
 import IPython.display as ipd
 import numpy as np
+import os
+
+
+# OS
+
+def flat_dir(directory):
+    files = []
+    for root, dirname, filenames in os.walk(directory):
+        for f in filenames:
+            if f.split(".")[-1] in ("wav", "mp3", "aif", "aiff"):
+                files += [os.path.join(root, f)]
+    return files
+
+
+# Conversion
 
 normalize = librosa.util.normalize
 a2db = lambda S: librosa.amplitude_to_db(abs(S), ref=S.max())
@@ -83,7 +98,6 @@ def show(S, figsize=(), y_axis="log", x_axis='frames', title=""):
 
 
 def signal(S, hop_length=1024, gain=1.):
-    y = None
     if S.dtype == np.complex64:
         return librosa.istft(S, hop_length=hop_length) * gain
     else:
@@ -96,5 +110,3 @@ def audio(S, hop_length=1024, gain=1.):
         return ipd.display(ipd.Audio(y, rate=22050))
     else:
         return ipd.display(ipd.Audio(S * gain, rate=22050))
-
-

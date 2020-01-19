@@ -1,4 +1,5 @@
 import numpy as np
+from cafca.util import b2m
 
 
 def bounded(X, min_x=None, max_x=None, keepdims=False, fill=0):
@@ -47,8 +48,6 @@ def center(indices, data):
     return np.sum(indices * weights)
 
 
-# Optimization
-
 def sparse_mean(x, fill=np.array([]), axis=0):
     """
     helper function to take the mean only of the finite values > 0 of an array
@@ -64,30 +63,6 @@ def sparse_mean(x, fill=np.array([]), axis=0):
         return np.apply_along_axis(sparse_mean, int(not axis), xabs)
 
 
-def retune(centers, eps=.1, max_iter=25):
-    if centers.size <= 1:
-        return centers
-
-    def _retune(centers, eps=eps):
-        # ESTIMATION STEP
-        K = square_ratios(centers)
-        ideal_ratios = (np.rint(K) * almost_ints(K, .1))
-        ideal_ratios[ideal_ratios <= 1.] = np.inf
-        # what the spectrum would look like, if partial_i were readjusted to integer ratios of partials_j
-        should_horz = centers * ideal_ratios
-        should_horz = np.asarray([sparse_mean(should_horz[i], centers[i]) \
-                                for i in range(centers.size)])
-        # what the fundamental SHOULD have as a spectrum if centers[i] were the true fundamental:
-        should_vert = centers[:, None] / ideal_ratios
-        should_vert = np.asarray([sparse_mean(should_vert[:, j], centers[j]) \
-                                for j in range(centers.size)])
-        # MAXIMIZATION STEP
-        return np.stack((should_horz, should_vert)).mean(axis=0)
-    for _ in range(max_iter):
-        centers = _retune(centers, eps=eps)
-    return centers
-
-
 def square_ratios(x):
     """returns the matrix x / x.T """
     x = np.asarray(x)
@@ -101,10 +76,9 @@ def almost_ints(x, gamma=1 / 8):
     return abs(np.rint(x) - x) <= (np.log10(x + 1) * gamma)
 
 
-def ideal_ints(centers, gamma=1/8):
-    K = square_ratios(centers)
+def ideal_ints(K, gamma=1/8):
     mask = almost_ints(K, gamma=gamma)
-    return np.rint(K * mask) + np.eye(centers.size, dtype=np.int32)
+    return np.rint(K * mask) + np.eye(K.shape[0], dtype=np.int32)
 
 
 def ratios(centers, gamma=1/8):
@@ -113,13 +87,9 @@ def ratios(centers, gamma=1/8):
     return K, K_p
 
 
-def ideal_centers(centers, ideal_ratios):
-    return centers * np.tril(ideal_ratios)
-
-
 def harm_factors(K):
     """
-    returns the element-wise harmonicity factors of a matrix of ratios
+    returns the element-wise harmonicity factors of a matrix a of ratios K
     """
     k_int = np.rint(K)
     where_int = k_int >= 2
@@ -129,9 +99,15 @@ def harm_factors(K):
     return out
 
 
-def harmonic_graph(centers, gamma=1/8):
-    K = square_ratios(centers)
+def harmonic_graph_ints(K, gamma=1/8):
     return almost_ints(K, gamma=gamma).astype(np.int32)
+
+
+def harmonic_graph_dist(K, max_dist=.05):
+    factors = harm_factors(K)
+    diffs = abs(np.rint(factors) - factors)
+    edges = ((diffs <= max_dist) & (diffs > 0)).astype(np.int32)
+    return edges + np.eye(K.shape[0], dtype=np.int32)
 
 
 def locodis(G):
@@ -163,89 +139,59 @@ class HarmonicSpectrum(object):
     def __init__(self, S,
                  mask=None,
                  max_r=100,
+                 max_dist=.05,
                  min_b=5, max_b=None,
-                 gamma=1/5):
+                 gamma=1/4):
         if len(S.shape) != 1:
             raise ValueError("`spectrum` must be a 1d-array")
         self.S = S
-        nz = bounded_nz(mask or S > S.mean() + 1, min_b, max_b)
+        if mask is None:
+            print("mask is None")
+            mask = S > S.mean()
+        nz = bounded_nz(mask, min_b, max_b)
         self.chains = group_by_cc(nz)
         self.centers = np.array([center(chain, S) for chain in self.chains])
+        self.n = self.centers.size
         self.K, self.K_prime = ratios(self.centers, gamma=gamma)
-        self.ideal_centers = self.centers * self.K_prime
-        self.inharmonicity = harm_factors(self.K)
-        self.graph = ((self.K_prime != 0) & (self.K_prime <= max_r)).astype(np.int32)
+        self.harmonicity = harm_factors(self.K)
+        self.graph = harmonic_graph_dist(self.K, max_dist=max_dist)
         self.roots_idx = locodis(self.graph)
-        self.harmonics = [i for i in range(self.centers.size) if self.graph[i, :i].sum() > 1]
-        self.residuals = [i for i in range(self.centers.size)
-                          if self.graph[i, :i].sum() == 1 and i not in self.centers]
+        self.is_harmonic = [i for i in range(self.n)
+                          if self.graph[i, :i].sum() > 1]
+        self.has_hamonics = [i for i in range(self.n)
+                            if self.graph[:, i].sum() > 1]
+        self.residuals = [i for i in range(self.n)
+                          if i not in np.r_[self.centers, self.is_harmonic, self.has_hamonics]]
         amp_w = np.array([S[chain].sum() for chain in self.chains])
         self.amp_w = amp_w / amp_w.sum()
+        self.amp_h = [self.amp_w[self.graph[:, i].nonzero()[0]].sum() for i in range(self.n)]
         self.harm_w = self.graph.sum(axis=0) - 1
 
     def as_graph(self):
+
+        def round3(x):
+            return np.round(x, decimals=3)
+
         graph = []
-        centers = np.round(b2m(self.centers), decimals=3)
-        amps = np.round(self.amp_w, decimals=3)
+        centers = round3(b2m(self.centers))
+        amps = round3(self.amp_h)
         for r in self.roots_idx:
             harms = self.graph[:, r].nonzero()[0][1:]
-            if np.any(harms):
-                K = np.round(self.K[harms, r], decimals=3)
-                res = np.round(self.K[self.roots_idx, r], decimals=3)
-                d = {
-                    "i_c": (r, centers[r]),
-                    "h_a": (self.harm_w[r], amps[r]),
-                    "harms": harms,
-                    "ratios": K,
-                    "residual_ratios": res,
-                    "comp": self.completeness(r)
-                }
-                graph += [d]
-        return sorted(graph, key=lambda d: d['comp'])[::-1]
+            inharms = round3(self.harmonicity[harms, r])
+            K = round3(self.K[harms, r])
+            d = {
+                "i_c": (r, centers[r]),
+                "h_a": (self.harm_w[r], amps[r]),
+                "harms": harms,
+                "ratios": np.stack((K, inharms)).T,
+                "comp": self.completeness(r)
+            }
+            graph += [d]
+        return sorted(graph, key=lambda d: d['h_a'][0] * d['h_a'][1])[::-1]
 
     def completeness(self, idx):
         K = self.K_prime[:, idx]
         K = np.unique(K[K != 0].astype(np.int32)[1:])
         return (((K.size ** 2) / K.max()) / K.min()) if K.size else 0
-
-
-
-
-
-
-# def retune_up(centers, r=40):
-#     mask = np.tril(ideal_ratios(centers, r=r))
-#     return sparse_mean(centers * mask, axis=0)
-#
-#
-# def retune_down(centers, r=40):
-#     mask = np.tril(ideal_ratios(centers, r=r))
-#     # avoid division by 0
-#     mask[mask == 0] = -1
-#     res = centers / mask.T
-#     res[res < 0] = 0
-#     return sparse_mean(res, axis=0)
-
-
-
-# def f0s(S, eps=.1, max_iter=25, min_a=0., min_b=1, max_b=None):
-#     Sabs = abs(S)
-#     chains = [group_by_cc(bounded_nz(Sabs[:, t], min_a, None))
-#               for t in range(Sabs.shape[1])]
-#     centers = [np.array([center(c, Sabs[:, t]) for c in chain])
-#                for t, chain in enumerate(chains)]
-#     centers = [retune(c, eps=eps, max_iter=max_iter)
-#                for c in centers]
-#     edges = [almost_int(floatp_ratios(c), eps)
-#              if c.size else np.array([]) for c in centers]
-#     locos_idx = [locodis(E) for E in edges]
-#     locos_weight = [(E.sum(axis=0) / E.sum())[idx] \
-#                     if E.size else np.array([0], dtype=np.int32) \
-#                     for idx, E in zip(locos_idx, edges)]
-#     locos = [list(zip(c[idx], w)) for c, idx, w in zip(centers, locos_idx, locos_weight)]
-#     return locos
-
-#
-
 
 

@@ -14,7 +14,7 @@ def as_novelty_f(graph, width=3, order=1, axis=0):
 
 
 def reduce_sequence(data, n=1, t_axis=-1, agg=lambda x, axis: x, J=None):
-    agged = running_agg(data, agg=agg, window=n, hop_length=1, mode="edge", \
+    agged = running_agg(data, agg=agg, window=n, hop_length=1, mode="edge",
                         p_axis=t_axis, f_axis=t_axis, a_axis=1)
     T = data.shape[t_axis]
     costs = np.zeros(T)
@@ -29,7 +29,7 @@ def reduce_sequence(data, n=1, t_axis=-1, agg=lambda x, axis: x, J=None):
 
 def KL(P, Q, t, n):
     if P[t].sum() < 5e-5 or Q[t-n].sum() < 5.e-5:
-        return 0. # ignore frames where the sum of energy is below 5.e-5
+        return 0.  # ignore frames where the sum of energy is below 5.e-5
     else:
         return stats.entropy(P[t], Q[t-n])
 
@@ -38,7 +38,7 @@ def KL_update(P, Q, t, n):
     prior = np.mean(Q[t-n], axis=0)
     posterior = np.mean(np.vstack((Q[t-n], P[t])), axis=0)
     if prior.sum() > 5e-5 or posterior.sum() < 5.e-5:
-        return 0. # ignore frames where the sum of energy is below 5.e-5
+        return 0.  # ignore frames where the sum of energy is below 5.e-5
     else:
         return stats.entropy(posterior, prior)
 
@@ -63,10 +63,10 @@ def max_in_range(y, rg=4, hop=1):
 
 
 def mad_outliers(y,thresh=3.5):
-    '''
+    """
     find outliers with median absolute deviation
     taken from https://stackoverflow.com/questions/22354094/pythonic-way-of-detecting-outliers-in-one-dimensional-observation-data
-    '''
+    """
     m = max(np.median(y), 1e-6)
     abs_dev = np.abs(y - m)
     left_mad = max(np.median(abs_dev[y <= m]), 1e-6)
@@ -76,7 +76,7 @@ def mad_outliers(y,thresh=3.5):
     modified_z_score = 0.6745 * abs_dev / y_mad
     modified_z_score[y == m] = 0
     modified_z_score[np.isnan(modified_z_score) | np.isinf(modified_z_score)] = 0
-    return (modified_z_score > thresh)
+    return modified_z_score > thresh
 
 
 # Freq Bands Splitter :

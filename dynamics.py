@@ -4,6 +4,7 @@ from scipy.ndimage import generic_filter
 from cafca.util import frame
 
 
+# Low level functions
 def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False):
     """
     fit an empirical distribution D to X and return the points in the domain of X
@@ -37,13 +38,13 @@ def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False):
     return sp
 
 
-def re_split_right(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
+def split_right(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
     new = uni_split_point(X[X >= splits[-2]],
                           n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros)
     return (*splits[:-2], new[1:])
 
 
-def re_split_left(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
+def split_left(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
     new = uni_split_point(X[X <= splits[1]],
                           n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros)
     return (new[:-1], *splits[1:])
@@ -67,6 +68,13 @@ def get_priors(sub_domains):
     sizes = [s.size for s in sub_domains]
     return np.array(sizes) / sum(sizes)
 
+
+def tag(X, splits):
+    tags = np.zeros_like(X, dtype=np.int32) - 1
+    return np.cumsum(np.stack(tuple(X >= s for s in splits)), axis=0, out=tags)
+
+
+# Higher level functions
 
 def n_uniform_partitions(X, min_n=2, min_size=100):
     """
@@ -103,11 +111,6 @@ def n_uniform_partitions(X, min_n=2, min_size=100):
             break
         n = new_n
     return n, subs, priors, splits
-
-
-def tag(X, splits):
-    tags = np.zeros_like(X, dtype=np.int32) - 1
-    return np.cumsum(np.stack(tuple(X >= s for s in splits)), axis=0, out=tags)
 
 
 def nd_n_uniform_partitions(X, axis="glob", min_n=2, min_size=100):

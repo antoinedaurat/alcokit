@@ -14,18 +14,21 @@ def selfmasked(y, hop=128, n_small=256, n_big=2048, margin=4, power=100):
     I = block_diag(*[block[:, None]] * (S_small.shape[0] - 1))
     S_hat = np.pad(I.dot(S_small[1:]), ((1, 0), (0, 0)))
     S_hat = S_big * librosa.util.softmask(abs(S_big), abs(S_hat), power=power)
-    return S_hat
+    return S_small, S_big, S_hat
 
 
-def preprocess_for_pitch(X, ga=1000, hw=2, vw=2):
+def smooth_2d(S, hw=2, vw=2, hagg=np.min, vagg=np.max):
+    out = running_agg(S, window=vw, agg=vagg, p_axis=0, f_axis=0, a_axis=1)
+    out = running_agg(out, window=hw, agg=hagg, p_axis=-1, f_axis=-1, a_axis=1)
+    return out
+
+
+def preprocess_for_pitch(X, ga=1000, hw=2, vw=2, hagg=np.min, vagg=np.max):
     S = abs(X)
     S = convolve(S,
                  np.array([[-.65, -.25, -.65], [.75, 1.5, .75], [-.65, -.25, -.65]]))
     S -= S.min()
     S = np.log1p(S)
-    # vert : maxpooling to get wide clusters
-    S = running_agg(S, window=vw, agg=np.max, p_axis=0, f_axis=0, a_axis=1)
-    # horz : min pooling to only keep long clusters
-    S = running_agg(S, window=hw, agg=np.min, p_axis=-1, f_axis=-1, a_axis=1)
+    S = smooth_2d(S, hw=hw, vw=vw, hagg=hagg, vagg=vagg)
     S[S <= (S.mean() + (S.mean() / ga))] = 0
     return S

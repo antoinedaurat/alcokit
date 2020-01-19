@@ -2,6 +2,15 @@ import numpy as np
 from cafca.util import b2m
 
 
+"""
+
+Graph of Local Centroid 
+
+"""
+
+
+# Low level functions
+
 def bounded(X, min_x=None, max_x=None, keepdims=False, fill=0):
     if X.size == 0:
         return X
@@ -69,6 +78,8 @@ def square_ratios(x):
     return np.tril(x[:, None] / x)
 
 
+# Middle Level Functions
+
 def almost_ints(x, gamma=1 / 8):
     """
     indicator function
@@ -98,6 +109,8 @@ def harm_factors(K):
     out[where_int] = np.log(K[where_int]) / k_int[where_int]
     return out
 
+
+# High Level functions
 
 def harmonic_graph_ints(K, gamma=1/8):
     return almost_ints(K, gamma=gamma).astype(np.int32)
@@ -135,12 +148,13 @@ def locodis(G):
     return np.asarray(candidates, dtype=np.int32)
 
 
+# Interfaces
+
 class HarmonicSpectrum(object):
     def __init__(self, S,
                  mask=None,
-                 max_r=100,
-                 max_dist=.05,
                  min_b=5, max_b=None,
+                 max_dist=.05,
                  gamma=1/4):
         if len(S.shape) != 1:
             raise ValueError("`spectrum` must be a 1d-array")

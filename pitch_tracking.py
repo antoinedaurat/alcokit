@@ -1,6 +1,6 @@
 import numpy as np
-from cafca.util import b2m
 
+from cafca.util import b2m
 
 """
 
@@ -25,6 +25,8 @@ def bounded(X, min_x=None, max_x=None, keepdims=False, fill=0):
     return X[(X <= max_x) & (X >= min_x)]
 
 
+# Chains
+
 def bounded_nz(x, min_i, max_i):
     if x.size == 0:
         return x
@@ -44,7 +46,7 @@ def group_by_cc(x, eps=1., max_cons=None):
     a = np.sort(x)
     chains = [[a[0]]]
     for i in range(1, a.size):
-        if (a[i-1] + eps >= a[i]) and \
+        if (a[i - 1] + eps >= a[i]) and \
                 (True if not max_cons else len(chains[-1]) < max_cons):
             chains[-1] += [a[i]]
         else:
@@ -52,8 +54,33 @@ def group_by_cc(x, eps=1., max_cons=None):
     return chains
 
 
+def split_at_saddles(St):
+    saddles = (St[:-2] > St[1:-1]) & (St[1:-1] < St[2:])
+    saddles = saddles.nonzero()[0] + 1
+    return np.split(np.arange(St.size), saddles)
+
+
+def surround_maxes(St, w=4):
+    peaks = (St[:-2] < St[1:-1]) & (St[1:-1] > St[2:])
+    peaks = peaks.nonzero()[0] + 1
+    return [np.arange(max([0, peak-w]), min([peak+w+1, St.size])) for peak in peaks]
+
+
+def chain_stats(chains):
+    n = len(chains)
+    sizes = np.array(tuple(x.size for x in chains))
+    return {
+        "n": n,
+        "mean_size": sizes.sum() / n,
+        "std": np.std(sizes),
+        "head": sizes[sizes.argsort()[:10]]
+    }
+
+
+# Centers
+
 def center(indices, data):
-    weights = data[indices] / (1e-9+data[indices].sum())
+    weights = data[indices] / (1e-9 + data[indices].sum())
     return np.sum(indices * weights)
 
 
@@ -72,13 +99,25 @@ def sparse_mean(x, fill=np.array([]), axis=0):
         return np.apply_along_axis(sparse_mean, int(not axis), xabs)
 
 
+def centers_stats(centers):
+    n = centers.size
+    diffs = np.round(abs(centers[:, None] - centers), decimals=2)
+    periods, counts = np.unique(diffs, return_counts=True)
+    return {
+        "n": n,
+        "center": centers.sum() / n,
+        "periods": periods[counts.argsort()[:10]],
+        "proba": counts.argsort()[:10] / (n**2)
+    }
+
+
+# Middle Level Functions
+
 def square_ratios(x):
     """returns the matrix x / x.T """
     x = np.asarray(x)
     return np.tril(x[:, None] / x)
 
-
-# Middle Level Functions
 
 def almost_ints(x, gamma=1 / 8):
     """
@@ -87,12 +126,12 @@ def almost_ints(x, gamma=1 / 8):
     return abs(np.rint(x) - x) <= (np.log10(x + 1) * gamma)
 
 
-def ideal_ints(K, gamma=1/8):
+def ideal_ints(K, gamma=1 / 8):
     mask = almost_ints(K, gamma=gamma)
     return np.rint(K * mask) + np.eye(K.shape[0], dtype=np.int32)
 
 
-def ratios(centers, gamma=1/8):
+def ratios(centers, gamma=1 / 8):
     K = square_ratios(centers)
     K_p = ideal_ints(K, gamma=gamma)
     return K, K_p
@@ -100,7 +139,7 @@ def ratios(centers, gamma=1/8):
 
 def harm_factors(K):
     """
-    returns the element-wise harmonicity factors of a matrix a of ratios K
+    returns the element-wise harmonicity factors of a matrix of ratios
     """
     k_int = np.rint(K)
     where_int = k_int >= 2
@@ -112,7 +151,7 @@ def harm_factors(K):
 
 # High Level functions
 
-def harmonic_graph_ints(K, gamma=1/8):
+def harmonic_graph_ints(K, gamma=1 / 8):
     return almost_ints(K, gamma=gamma).astype(np.int32)
 
 
@@ -133,29 +172,29 @@ def locodis(G):
     n = G.shape[0]
     D = np.zeros((n, n), dtype=np.int32)
     for i in range(n):
-        for j in range(i+1, n):
+        for j in range(i + 1, n):
             # avoid having ands at higher bins than i and j (i.e. where bin_k = bin_i * bin_j)
             # i -> j IFF bins[:j] have edges in G
-            ands = np.sum(np.logical_and(G[:j+1, i], G[:j+1, j]))
+            ands = np.sum(np.logical_and(G[:j + 1, i], G[:j + 1, j]))
             D[i, j] = ands
     sums = D.sum(axis=1)
     candidates = list((sums > 0).nonzero()[0])
     for i, c in enumerate(candidates[:-1]):
-        intersect = set(D[i].nonzero()[0]) & set(candidates[i+1:])
+        intersect = set(D[i].nonzero()[0]) & set(candidates[i + 1:])
         if len(intersect) > 0:
             for x in intersect:
                 candidates.remove(x)
     return np.asarray(candidates, dtype=np.int32)
 
 
-# Interfaces
+# Interface
 
 class HarmonicSpectrum(object):
     def __init__(self, S,
                  mask=None,
                  min_b=5, max_b=None,
                  max_dist=.05,
-                 gamma=1/4):
+                 gamma=1 / 4):
         if len(S.shape) != 1:
             raise ValueError("`spectrum` must be a 1d-array")
         self.S = S
@@ -171,9 +210,9 @@ class HarmonicSpectrum(object):
         self.graph = harmonic_graph_dist(self.K, max_dist=max_dist)
         self.roots_idx = locodis(self.graph)
         self.is_harmonic = [i for i in range(self.n)
-                          if self.graph[i, :i].sum() > 1]
+                            if self.graph[i, :i].sum() > 1]
         self.has_hamonics = [i for i in range(self.n)
-                            if self.graph[:, i].sum() > 1]
+                             if self.graph[:, i].sum() > 1]
         self.residuals = [i for i in range(self.n)
                           if i not in np.r_[self.centers, self.is_harmonic, self.has_hamonics]]
         amp_w = np.array([S[chain].sum() for chain in self.chains])
@@ -207,5 +246,4 @@ class HarmonicSpectrum(object):
         K = self.K_prime[:, idx]
         K = np.unique(K[K != 0].astype(np.int32)[1:])
         return (((K.size ** 2) / K.max()) / K.min()) if K.size else 0
-
 

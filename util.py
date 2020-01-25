@@ -50,6 +50,13 @@ def delta_b(b, delta_m=1, sr=22050, n_fft=2048):
     return b - m2b(b2m(b, **params) - delta_m, **params)
 
 
+# Useful formulas
+
+def logistic_map(X, thresh=.1, strength=20):
+    y = X - thresh
+    return 1 / (1 + np.exp(- y * strength))
+
+
 # Sequences
 
 def frame(a, m_frames, hop_length=1, mode='edge', p_axis=-1, f_axis=-1):

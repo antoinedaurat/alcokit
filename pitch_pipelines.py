@@ -1,27 +1,33 @@
+import librosa
+
+from cafca.dynamics import uni_split_point, split_right
 from cafca.pitch_tracking import *
 from cafca.util import b2m
-import librosa
-from cafca.preprocessing import selfmasked, preprocess_for_pitch
-from cafca.dynamics import uni_split_point, split_right, tag
 
 
 class PitchPipeline(object):
     def __init__(self,
                  preproc_step=None,
                  split_step=None,
+                 prune_step=None,
                  graph_step=None,
                  pred_step=None,
-                 post_step=None
+                 post_step=None,
+                 cache_output=False
                  ):
         self.preproc_step = preproc_step
         self.split_step = split_step
+        self.prune_step = prune_step
         self.graph_step = graph_step
         self.pred_step = pred_step
         self.post_step = post_step
+        self.cache_output = cache_output
 
     def call1d(self, S):
         chains = self.split_step(S)
-        centers = np.array(center(chain, S) for chain in chains)
+        if self.prune_step is not None:
+            chains = self.prune_step(S, chains)
+        centers = np.array([center(chain, S) for chain in chains])
         K = square_ratios(centers)
         graph = self.graph_step(K)
         return self.pred_step(graph=graph, K=K, centers=centers, chains=chains, S=S)
@@ -31,9 +37,12 @@ class PitchPipeline(object):
             input = self.preproc_step(input)
         preds = []
         for t in range(input.shape[1]):
+            print(t, end=" ")
             preds += [self.call1d(input[:, t])]
         if self.post_step is not None:
             preds = self.post_step(preds)
+        if self.cache_output:
+            self.output = preds
         return preds
 
     @staticmethod
@@ -55,9 +64,8 @@ class PitchPipeline(object):
 
     def get_centers(self, input):
         chains = self.get_chains(input)
-        _get_centers = lambda chain: [center(ch, input[:, t])
-                                      for t, ch in enumerate(chain)]
-        return self._iterate_list(chains, _get_centers)
+        centers = [[center(c, input[:, t]) for c in ch] for t, ch in enumerate(chains)]
+        return centers
 
     def get_graphs(self, input):
         centers = self.get_centers(input)
@@ -84,8 +92,26 @@ class Preprocess(object):
 
 
 class Split(object):
+    @staticmethod
+    def by_cc(min_b=0, max_b=np.inf):
+        def _split(St):
+            mask = St > St.mean()
+            nz = bounded_nz(mask, min_b, max_b)
+            return group_by_cc(nz)
+        return _split
 
-    by_saddle = split_at_saddles
+    @staticmethod
+    def by_saddle(min_b=0, max_b=np.inf,
+                  min_chain_size=2, max_chain_size=np.inf):
+        def _split(S):
+            chains = split_at_saddles(S)
+            chains = [c for c in chains
+                      if c.any() and c.min() >= min_b and
+                      c.max() <= max_b and
+                      min_chain_size <= c.size <= max_chain_size]
+            return chains
+
+        return _split
 
     @staticmethod
     def by_categorized_chain(min_b=0, max_b=np.inf,
@@ -106,7 +132,17 @@ class Split(object):
                     if all([chain.min() >= min_b,
                             chain.max() <= max_b,
                             min_chain_size <= chain.size <= max_chain_size])]
+
         return _split
+
+
+class Prune(object):
+    @staticmethod
+    def by_skewness(window_size=3, ratio_thresh=.5, maxb=400):
+        def _prune(St, chains):
+            scores = [peak_skewness(St, c, w=window_size) for c in chains]
+            return [c for c, score in zip(chains, scores) if c.max() <= maxb and score >= ratio_thresh]
+        return _prune
 
 
 class Graph(object):
@@ -120,14 +156,24 @@ class Graph(object):
 
 
 class Predict(object):
-    @property
-    def by_heaviest_root(self):
+    @staticmethod
+    def by_heaviest_root():
         def _predict(graph=None, K=None, centers=None, chains=None, S=None):
+            """
+            compute the sums of the amplitudes for each component (i.e. root)
+            and return sort the roots accordingly
+            """
             roots = locodis(graph)
             amp_w = np.array([S[chain].sum() for chain in chains])
             amp_w = amp_w / amp_w.sum()
-            amp_h = [amp_w[graph[:, i].nonzero()[0]].sum() for i in range(centers.size)]
-            return b2m(centers[amp_h[roots].argsort()[::-1]])
+            amp_h = np.array([amp_w[graph[:, i].nonzero()[0]].sum() for i in range(centers.size)])
+            amp_h = amp_h / (amp_h.sum() + 1e-9)
+            if roots.size == 0:
+                return np.array([])
+            preds = centers[amp_h[roots].argsort()[::-1]]
+            # if roots.size > 0:
+            #     print(list(zip(b2m(preds, n_fft=2048), np.sort(amp_h[roots])[::-1])))
+            return preds
         return _predict
 
 
@@ -135,7 +181,7 @@ class Post(object):
     @staticmethod
     def asarray(n_pitch=1, min_midi=0, max_midi=127):
         def _asarray(preds):
-            out = np.zeros((len(preds), n_pitch), dtype=np.float)
+            out = np.zeros((n_pitch, len(preds)), dtype=np.float)
             for t, pred in enumerate(preds):
                 pred = np.asarray(pred)
                 pred = pred[(pred >= min_midi) & (pred <= max_midi)]
@@ -144,5 +190,5 @@ class Post(object):
                     pred = np.pad(pred, (0, n_pitch - pred.size), constant_values=-1)
                 out[:, t] = pred
             return out
-        return _asarray
 
+        return _asarray

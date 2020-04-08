@@ -1,6 +1,6 @@
 import numpy as np
 
-from cafca.util import b2m
+from cafca.util import b2m, hz2m, m2hz, normalize
 
 """
 
@@ -75,6 +75,20 @@ def chain_stats(chains):
         "std": np.std(sizes),
         "head": sizes[sizes.argsort()[:10]]
     }
+
+
+def peak_skewness(St, chain, w=3):
+    """
+    given that St[chain] has a peak, this function computes the skewness of the peak,
+    i.e. how fast is the curve around the peak rising above the mean
+    """
+    region = St[chain]
+    mx = region.max()
+    mx_idx = region.argmax() + chain.min()
+    window = np.arange(-w, w + 1) + mx_idx
+    window = window[(window >= 0) & (window < St.size)]
+    mean = St[window].mean()
+    return (mx - mean) * (mx / (1e-8 + mean))
 
 
 # Centers
@@ -185,6 +199,41 @@ def locodis(G):
             for x in intersect:
                 candidates.remove(x)
     return np.asarray(candidates, dtype=np.int32)
+
+
+def spectra(S, midi_pitches, h_dist=1., tuning=0., decay_len=2., min_width=1.):
+    """
+    @param S:
+    @param midi_pitches:
+    @param h_dist: harmonic distorsion -> partial k = f0 * k * h_dist
+    @param tuning: deviation in semi-tones to the standard tuning
+    @param decay_len: ~ how many octaves it takes to kill the spectrum to 0. amplitude
+    @param min_width: ~ how wide should a partial peak be (at least)
+    @return:
+    """
+
+    frequencies = np.linspace(0, 22050 / 2, S.shape[0])
+    mid_col = m2hz(midi_pitches + tuning) * h_dist
+    ratios = frequencies / mid_col[:, None]
+
+    # period of the spectrum of a
+    D = ((.5 + np.maximum(ratios, .5)) % 1) - .5
+
+    freqswidth = np.diff(hz2m(frequencies[1:]), append=1e-8)
+    freqswidth = np.maximum(np.r_[2 * freqswidth[0], freqswidth], 1 / min_width)
+
+    # in exp(-width * X)  -> width should be scaled to a (with a lower bound)
+    D = np.exp(-(freqswidth * mid_col)[:, None] * (D ** 2))
+
+    # exponential decay of the spectrum
+    D *= np.exp(- ratios * (1 / decay_len))
+
+    D = normalize(D, axis=0)
+    S_ = normalize(S, axis=1)
+
+    # divide the dot-product by the sum of S -> how much does moded explains S
+    #
+    return D, (D @ S_) / (S_.sum(axis=0))
 
 
 # Interface

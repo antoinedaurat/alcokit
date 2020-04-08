@@ -5,7 +5,7 @@ from cafca.util import frame
 
 
 # Low level functions
-def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False):
+def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False, uni_thresh=1e-1):
     """
     fit an empirical distribution D to X and return the points in the domain of X
     where the sign of the derivative of the pdf of D is 0
@@ -25,7 +25,7 @@ def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False):
     dev_sign = np.sign(dev)
     dev_abs = abs(dev)
     # X is already "almost" uniform
-    if dev_abs.max() <= 1e-1:
+    if dev_abs.max() <= uni_thresh:
         return x_min, x_max
     # X hasn't any zero crossings
     if ignore_zeros or (np.all(dev_sign[1:-1] >= 0) or np.all(dev_sign[1:-1] <= 0)):
@@ -38,16 +38,18 @@ def uni_split_point(X, n_bins=200, min_size=100, ignore_zeros=False):
     return sp
 
 
-def split_right(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
+def split_right(X, splits, n_bins=200, min_size=100, ignore_zeros=False, uni_thresh=1e-1):
     new = uni_split_point(X[X >= splits[-2]],
-                          n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros)
-    return (*splits[:-2], new[1:])
+                          n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros,
+                          uni_thresh=uni_thresh)
+    return (*splits[:-1], *new[1:])
 
 
-def split_left(X, splits, n_bins=200, min_size=100, ignore_zeros=False):
+def split_left(X, splits, n_bins=200, min_size=100, ignore_zeros=False, uni_thresh=1e-1):
     new = uni_split_point(X[X <= splits[1]],
-                          n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros)
-    return (new[:-1], *splits[1:])
+                          n_bins=n_bins, min_size=min_size, ignore_zeros=ignore_zeros,
+                          uni_thresh=uni_thresh)
+    return (*new[:-1], *splits[1:])
 
 
 def sub_domains_from_splits(X, splits, keepdims=False):
@@ -71,7 +73,7 @@ def get_priors(sub_domains):
 
 def tag(X, splits):
     tags = np.zeros_like(X, dtype=np.int32) - 1
-    return np.cumsum(np.stack(tuple(X >= s for s in splits)), axis=0, out=tags)
+    return np.sum(np.stack(tuple(X >= s for s in splits)), axis=0, out=tags) - 1
 
 
 # Higher level functions

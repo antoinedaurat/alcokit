@@ -5,6 +5,11 @@ from scipy.linalg import block_diag
 from cafca.util import running_agg
 
 
+def stft(file):
+    y, _ = librosa.load(file)
+    return abs(librosa.stft(y, n_fft=2048, hop_length=512).T)
+
+
 def selfmasked(y, hop=128, n_small=256, n_big=2048, margin=4, power=100):
     S_small = librosa.stft(y, n_fft=n_small, hop_length=hop, center=False)
     S_big = librosa.stft(y, n_fft=n_big, hop_length=hop, center=False)

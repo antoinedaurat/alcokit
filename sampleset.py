@@ -8,7 +8,7 @@ import numpy as np
 from librosa.core.spectrum import griffinlim
 from librosa.display import specshow, waveplot
 from sklearn.preprocessing import MinMaxScaler
-from cafca.util import flat_dir
+from cafca.util import flat_dir, is_audio_file
 
 
 def scale(X: list):
@@ -23,7 +23,7 @@ class SampleSet(object):
      CONSTRUCTORS
     """
 
-    def from_ffts(self, ffts, n_fft=1024, hop_length=512, sample_rate=22500, wavs=[], names=[]):
+    def from_ffts(self, ffts, n_fft=1024, hop_length=512, sample_rate=22050, wavs=[], names=[]):
         """ """
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -64,13 +64,13 @@ class SampleSet(object):
         if directory:
             if not recursive:
                 gen = enumerate(
-                    [os.path.join(directory, f) for f in os.listdir(directory) if f.split(".")[-1] in ("mp3", "wav")])
+                    [os.path.join(directory, f) for f in sorted(os.listdir(directory)) if is_audio_file(f)])
             else:
                 gen = enumerate(flat_dir(directory))
 
         self.N = 0
         for _, file in gen:
-            if not file.split(".")[-1] in ("mp3", "wav", "aif", "aiff"):
+            if not is_audio_file(file):
                 print("skipping unsupported file", file)
                 continue
             i = self.N
@@ -98,7 +98,7 @@ class SampleSet(object):
                  names=[],
                  n_fft=1024,
                  hop_length=512,
-                 sample_rate=22500,
+                 sample_rate=22050,
                  with_imag=True,
                  max_n_samples=-1,
                  recursive=True):

@@ -67,7 +67,6 @@ def alignement(X, Y,
                metric='cosine',
                figsize=(10, 10),
                ):
-    sr = 22050
     if compute_chroma:
         x = librosa.feature.chroma_stft(S=abs(X), tuning=0, norm=2)
         y = librosa.feature.chroma_stft(S=abs(Y), tuning=0, norm=2)
@@ -76,7 +75,6 @@ def alignement(X, Y,
         y = abs(Y)
 
     D, wp = librosa.sequence.dtw(X=x, Y=y, metric=metric, subseq=True)
-    matching_cost = D[-1, :] / wp.shape[0]
 
     if figsize is not None:
         show(D, figsize=figsize, title="costs matrix", x_axis="frames", y_axis="frames")
@@ -105,12 +103,13 @@ def random_path(X, Y, D, wp,
 
     crossing_durs = np.random.randint(min_step_duration, max_step_duration, size=n_crossing)
 
-    idx_getter = None
-
     if mode == "path":
         idx_getter = lambda k, t, trim: wp[t, k]
     elif mode == "max":
         agg = np.argmax
+        idx_getter = lambda k, t, trim: int(agg(D[t, :-trim])) if k == 0 else int(agg(D.T[t, :-trim]))
+    elif mode == "min":
+        agg = np.argmin
         idx_getter = lambda k, t, trim: int(agg(D[t, :-trim])) if k == 0 else int(agg(D.T[t, :-trim]))
     else:
         raise ValueError("value %s for 'mode' is not recognized" % mode)

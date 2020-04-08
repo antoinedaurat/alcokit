@@ -9,13 +9,17 @@ import os
 
 # OS
 
+def is_audio_file(file):
+    return file.split(".")[-1] in ("wav", "aif", "aiff", "mp3", "m4a") and "._" not in file
+
+
 def flat_dir(directory):
     files = []
     for root, dirname, filenames in os.walk(directory):
         for f in filenames:
-            if f.split(".")[-1] in ("wav", "mp3", "aif", "aiff"):
+            if is_audio_file(f):
                 files += [os.path.join(root, f)]
-    return files
+    return sorted(files)
 
 
 # Conversion
@@ -50,6 +54,27 @@ def delta_b(b, delta_m=1, sr=22050, n_fft=2048):
     return b - m2b(b2m(b, **params) - delta_m, **params)
 
 
+def unit_scale(x):
+    return (x - x.min()) / (x.max() - x.min())
+
+
+# FFTS utils
+
+def complex2channels(S, chan_axis=1, unwrap_phase=True, inst_freq=True):
+    mag, phase = librosa.magphase(S)
+    phase = np.angle(phase)
+    if unwrap_phase:
+        phase = ((phase / np.pi) + 1) % 1
+    if inst_freq:
+        phase = np.diff(phase, prepend=0)
+    return np.stack((mag, phase), axis=chan_axis)
+
+
+def channels2complex(S, chan_axis=1):
+    mag, phase = np.take(S, 0, axis=chan_axis), np.take(S, 1, axis=chan_axis)
+    return mag * np.exp(1j * phase)
+
+
 # Useful formulas
 
 def logistic_map(X, thresh=.1, strength=20):
@@ -68,7 +93,7 @@ def frame(a, m_frames, hop_length=1, mode='edge', p_axis=-1, f_axis=-1):
     return librosa.util.frame(a, frame_length=m_frames, hop_length=hop_length, axis=f_axis)
 
 
-def running_agg(a, agg=lambda x, axis: x, window=10, hop_length=1, mode='edge', \
+def running_agg(a, agg=lambda x, axis: x, window=10, hop_length=1, mode='edge',\
                 p_axis=-1, f_axis=-1, a_axis=1):
     framed = frame(a, m_frames=window, hop_length=hop_length, p_axis=p_axis, f_axis=f_axis)
     return agg(framed, axis=a_axis)
@@ -89,10 +114,12 @@ def dbspec(S):
         S_hat = a2db(abs(S)) + 40
     elif S.min() >= 0 and S.dtype in (np.float, np.float32, np.float64, np.float_):
         S_hat = a2db(S) + 40
+    else:
+        S_hat = S
     return S_hat
 
 
-def show(S, figsize=(), y_axis="log", x_axis='frames', title=""):
+def show(S, figsize=(), y_axis="linear", x_axis='frames', title=""):
     S_hat = dbspec(S)
     # make sure we have only reals in db
     if figsize:
@@ -105,7 +132,7 @@ def show(S, figsize=(), y_axis="log", x_axis='frames', title=""):
 
 
 def signal(S, hop_length=1024, gain=1.):
-    if S.dtype == np.complex64:
+    if S.dtype in (np.complex64, np.complex128):
         return librosa.istft(S, hop_length=hop_length) * gain
     else:
         return griffinlim(S, hop_length=hop_length) * gain

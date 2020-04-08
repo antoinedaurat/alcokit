@@ -22,7 +22,7 @@ def segment_from_recurrence_matrix(X,
                                    bandwidth=1.,
                                    thresh=0.2,
                                    min_dur=4,
-                                  plot=True):
+                                   plot=True):
     R = recurrence_matrix(
         X, metric="cosine", mode="affinity",
         k=k, sym=sym, bandwidth=bandwidth, self=True)
@@ -179,11 +179,12 @@ class Segment(object):
 
 
 class SegmentMap(object):
-    
+
     def __init__(self, sample=None, L=6, k=200, sym=True, bandwidth=5, thresh=.2, min_dur=5, plot=True):
         self.sample = sample  # fft
         self.T = sample.shape[1]
-        _, _, _, self.slices = segment_from_recurrence_matrix(abs(self.sample), L, k, sym, bandwidth, thresh, min_dur, plot=plot)
+        _, _, _, self.slices = segment_from_recurrence_matrix(abs(self.sample), L, k, sym, bandwidth, thresh, min_dur,
+                                                              plot=plot)
         # self.idx, self.slices = self.idx[:-1], self.slices[:-1]
         self.segs = [Segment(sample[:, slice]) for slice in zip(self.slices)]
         print("found", len(self.segs), "segments")
@@ -192,7 +193,7 @@ class SegmentMap(object):
     def __iter__(self):
         for seg in self.segs:
             yield seg
-    
+
     def slices_stats(self):
         n, counts = np.unique([s.size for s in self.slices], return_counts=True)
         print("segment's length || frequency")
@@ -247,10 +248,10 @@ class SegmentMap(object):
 
     def expected_length(self):
         return int(np.ceil(expected_len(self.o_lens_list)))
-    
+
     def median_length(self):
         return int(np.ceil(np.median(self.o_lens_list)))
-    
+
     def mode_length(self):
         x, counts = np.unique(self.o_lens_list, return_counts=True)
         return int(np.ceil(x[np.argmax(counts)]))
@@ -263,127 +264,6 @@ class SegmentMap(object):
 
     def export(self, directory):
         pass
-
-########################################################################################################################
-
-# OLD SCRIPT
-
-########################################################################################################################
-
-
-def get_segment_slices(samples,
-                       L=6,
-                       k=200,
-                       sym=True,
-                       bandwidth=5,
-                       thresh=.2,
-                       min_dur=5,
-                       plot=False):
-    slices = {}
-    print("segmenting sample", end=" ", flush=True)
-    for i in range(len(samples)):
-        print(i, end=", ", flush=True)
-        _, _, dg, sl = segment_from_recurrence_matrix(abs(samples[i]),
-                                                   L=L,
-                                                   k=k,
-                                                   sym=sym,
-                                                   bandwidth=bandwidth,
-                                                   thresh=thresh,
-                                                   min_dur=min_dur)
-        slices[i] = sl
-        if plot:
-            plt.figure(figsize=(samples[i].shape[1] / 30, 6))
-            plt.plot(dg)
-            plt.vlines([s[0] for s in sl], 0, dg.max())
-            plt.title("sample " + str(i))
-    print("\n")
-    return slices
-
-
-def standardize_slices(slices, max_length=None):
-    if max_length is None:
-        expected = expected_len([s.size for i in range(len(slices)) for s in slices[i]])
-        m = np.ceil(expected)
-    else:
-        m = max_length
-
-    true_dur = {i: [s.size + 0 for s in slices[i]] for i in range(len(slices))}
-    factors = {i: [int(np.rint(n / m)) for n in true_dur[i]] for i in true_dur.keys()}
-
-    stretched = {}
-    time_idx = {}
-    for i in range(len(slices)):
-        sl = slices[i]
-        stretched[i] = []
-        time_idx[i] = []
-        for j, piece in enumerate(sl):
-            n = piece.size
-            if is_multiple(n, m):
-                # round n to the nearest multiple of m
-                s_hat = stretched_range(n, nearest_multiple(n, m))
-                # overwrite the slice in-place
-                time_idx[i] += [s_hat]
-                sl[j] = (piece, s_hat)
-                stretched[i] += [True]
-            else:
-                time_idx[i] += [np.arange(n)]
-                stretched[i] += [False]
-    return slices, factors, stretched, true_dur, m
-
-
-def stretch_and_stack(Xs, d, slices, factors, stretched):
-    out = []
-    stretch_factors = []
-    print("normalizing the segments of sample", end=" ", flush=True)
-    for i in Xs.keys():
-        print(i, end=", ", flush=True)
-        for j in range(len(slices[i])):
-            if stretched[i][j]:
-                original_time_idx = slices[i][j][0]
-                new_time_idx = slices[i][j][1]
-                if new_time_idx.size == 0:
-                    print(slices[i][j])
-                stretch_factors += [(original_time_idx.size, original_time_idx.size / new_time_idx.size)]
-                x = Xs[i][:, original_time_idx]
-                f = factors[i][j]
-                new = time_stretch(x, new_time_idx)
-                splits = ((1 + np.arange(f)) * int(d))
-                splits = np.split(new, splits, axis=1)
-                splited = np.stack(splits[:-1] if len(splits) > 1 else splits)
-                out += [splited]
-            else:
-                f = factors[i][j]
-                x = Xs[i][:, slices[i][j]]
-                new = time_stretch(x, slices[i][j] - slices[i][j].min())
-                stretch_factors += [(slices[i][j].size, 1)]
-                f = factors[i][j]
-                splits = ((1 + np.arange(f)) * int(d))
-                splited = np.stack(np.split(new, splits, axis=1)[:-1])
-                out += [splited]
-    print("\n")
-    return out, stretch_factors
-
-
-def standardize_segments(samples, slices, max_length=None, encode_durs=False):
-    new_slices, factors, stretched, true_dur, s = standardize_slices(slices, max_length=max_length)
-    normed, durs = stretch_and_stack(samples, s, new_slices, factors, stretched)
-    normed = np.concatenate(normed, axis=0)
-    if encode_durs:
-        return normed, true_dur
-    else:
-        return normed, durs, true_dur
-
-
-def segment_samples(samples, mode="stand", encode_durs=False):
-    slices = get_segment_slices(samples)
-    if mode == "stand":
-        return standardize_segments(samples, slices, encode_durs=encode_durs)
-    elif mode == "raw":
-        return {i: [samples[i][:, s] for s in slices] for i in samples.keys()}
-    elif type(mode) == int:  # max segment length
-        return standardize_segments(samples, slices, max_length=mode, encode_durs=encode_durs)
-    else:
-        raise NotImplementedError("No implementation available for `mode` " + str(mode))
 
 
 def block_reduce(R, slices):
@@ -564,38 +444,3 @@ def alphabet(X, family_func=connected_components,
         R = recurrence_matrix(np.stack(alphas).T, k=k, sym=sym, bandwidth=bandwidth)
         d = family_func(R, thresh=thresh)
     return alphas
-
-
-if __name__ == '__main__':
-    from cafca.sampleset import SampleSet
-    import os
-    from cafca.util import complex2channels
-
-    # directory = "../Segmentations_tests/Two and Three Part Inventions and Sinfonias (Glenn Gould)/"
-    # directory = "../Arie/"
-    #
-    # samples = SampleSet(directory,
-    #                     n_fft=2048, hop_length=512,
-    #                     max_n_samples=-1, recursive=True)
-    #
-    # segmented, _, _ = segment_samples(samples.ffts)
-    # segmented = complex2channels(segmented, chan_axis=1)
-    # segmented = np.load(directory + "segmented.npy")
-    # segmented = segmented[:, 0]
-    # np.save(directory + "segmented", segmented)
-    # print("saved array of shape", segmented.shape, "in", directory)
-
-    # directory = "../data_by_technique/"
-    #
-    # for d in os.listdir(directory):
-    #     print(d, directory+d, os.path.isdir(d))
-    #     if not os.path.isdir(directory+d) or d not in ("vibrato", "vocal_fry"):
-    #         continue
-    #     samples = SampleSet(directory+d,
-    #                         n_fft=2048, hop_length=512,
-    #                         max_n_samples=-1, recursive=True)
-    #
-    #     segmented, _, _ = segment_samples(samples.ffts, mode=14)
-    #     print(segmented.shape)
-    #     np.save(directory+d+"/segmented", segmented)
-    #     print("saved array of shape", segmented.shape, "in", directory)

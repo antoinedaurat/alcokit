@@ -2,23 +2,17 @@ import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.decomposition import non_negative_factorization
-
+from cafca.fft import FFT
 from cafca.util import t2f, t2s, f2t, show, signal, audio
+from cafca import HOP_LENGTH, SR
 
 
-def harmonic_percussive(S, margin=1, figsize=(16, 4)):
+def harmonic_percussive(S, margin=1):
     D_h, D_p = librosa.decompose.hpss(S, margin=margin)
 
-    if figsize is not None:
-        show(S, figsize=figsize, title="original")
-        show(D_h, figsize=figsize, title="harmonic")
-        show(D_p, figsize=figsize, title="percussive")
-    print("original")
-    audio(S)
-    print("harmonic")
-    audio(D_h)
-    print("percussive")
-    audio(D_p)
+    if isinstance(S, FFT):
+        D_h = FFT.to_fft(D_h, S.hop, S.sr)
+        D_p = FFT.to_fft(D_p, S.hop, S.sr)
     return D_h, D_p
 
 
@@ -26,8 +20,7 @@ def REP_SIM(S,
             aggregate=np.median,
             metric='cosine',
             width_sec=2.,
-            margin_b=2, margin_f=10, power=2,
-            figsize=(16, 4)):
+            margin_b=2, margin_f=10, power=2):
     S_full, _ = librosa.magphase(S)
     w = int(t2f(width_sec, sr=22050, hop_length=1024))
     S_filter = librosa.decompose.nn_filter(S_full,
@@ -48,17 +41,10 @@ def REP_SIM(S,
     S_foreground = mask_f * S_full
     S_background = mask_b * S_full
 
-    if figsize is not None:
-        show(S_full, figsize=figsize, title="original")
-        show(S_background, figsize=figsize, title="background")
-        show(S_foreground, figsize=figsize, title="foreground")
+    if isinstance(S, FFT):
+        S_foreground = FFT.to_fft(S_foreground, S.hop, S.sr)
+        S_background = FFT.to_fft(S_background, S.hop, S.sr)
 
-    print("original")
-    audio(S_full)
-    print("background")
-    audio(S_background)
-    print("foreground")
-    audio(S_foreground)
     return S_background, S_foreground
 
 
@@ -130,13 +116,13 @@ def random_path(X, Y, D, wp,
         last_i = idx_getter(k, last_i % [maxt_x, maxt_y][k], d + 1)
 
         # join the audios :
-        z = signal(z)
+        z = signal(z, X.hop if isinstance(X, FFT) else HOP_LENGTH)
         z[:xfade_dur] *= fade_in
         z[-xfade_dur:] *= fade_out
         pieces[-xfade_dur:] += z[:xfade_dur]
         pieces = np.concatenate((pieces, z[xfade_dur:]))
 
-    return audio(pieces)
+    return audio(pieces, *((X.hop, X.sr) if isinstance(X, FFT) else (HOP_LENGTH, SR)))
 
 
 def decompose(X,

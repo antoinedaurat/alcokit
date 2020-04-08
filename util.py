@@ -1,14 +1,13 @@
 import librosa
-from librosa.display import specshow, waveplot
-from librosa.core.spectrum import griffinlim
-import matplotlib.pyplot as plt
-import IPython.display as ipd
 import numpy as np
 import os
+from librosa.display import specshow
+import matplotlib.pyplot as plt
+import IPython.display as ipd
+from cafca import HOP_LENGTH, SR, N_FFT
 
 
 # OS
-
 def is_audio_file(file):
     return file.split(".")[-1] in ("wav", "aif", "aiff", "mp3", "m4a") and "._" not in file
 
@@ -36,17 +35,17 @@ hz2m = librosa.hz_to_midi
 m2hz = librosa.midi_to_hz
 
 
-def m2b(m, sr=22050, n_fft=2048):
+def m2b(m, sr=SR, n_fft=N_FFT):
     step = (sr / 2) / (n_fft // 2)
     return m2hz(m) / step
 
 
-def b2m(b, sr=22050, n_fft=2048):
+def b2m(b, sr=SR, n_fft=N_FFT):
     step = (sr / 2) / (n_fft // 2)
     return hz2m(b * step)
 
 
-def delta_b(b, delta_m=1, sr=22050, n_fft=2048):
+def delta_b(b, delta_m=1, sr=SR, n_fft=N_FFT):
     """
     returns the size in bins of the interval delta_m (in midi) at bin `b`
     """
@@ -58,28 +57,40 @@ def unit_scale(x):
     return (x - x.min()) / (x.max() - x.min())
 
 
-# FFTS utils
-
-def complex2channels(S, chan_axis=1, unwrap_phase=True, inst_freq=True):
-    mag, phase = librosa.magphase(S)
-    phase = np.angle(phase)
-    if unwrap_phase:
-        phase = ((phase / np.pi) + 1) % 1
-    if inst_freq:
-        phase = np.diff(phase, prepend=0)
-    return np.stack((mag, phase), axis=chan_axis)
-
-
-def channels2complex(S, chan_axis=1):
-    mag, phase = np.take(S, 0, axis=chan_axis), np.take(S, 1, axis=chan_axis)
-    return mag * np.exp(1j * phase)
-
-
 # Useful formulas
 
 def logistic_map(X, thresh=.1, strength=20):
     y = X - thresh
     return 1 / (1 + np.exp(- y * strength))
+
+
+# Debugging utils
+
+def signal(S, hop_length=HOP_LENGTH):
+    if S.dtype in (np.complex64, np.complex128):
+        return librosa.istft(S, hop_length=hop_length)
+    else:
+        return librosa.griffinlim(S, hop_length=hop_length)
+
+
+def audio(S, hop_length=HOP_LENGTH, sr=SR):
+    if len(S.shape) > 1:
+        y = signal(S, hop_length)
+        return ipd.display((ipd.Audio(y, rate=sr),))
+    else:
+        return ipd.display((ipd.Audio(S, rate=sr),))
+
+
+def show(S, figsize=(), to_db=True, y_axis="linear", x_axis='frames', title=""):
+    S_hat = S.db() if to_db else S
+    S_hat = S_hat if S.t_axis == 1 else S_hat.T
+    if figsize:
+        plt.figure(figsize=figsize)
+    ax = specshow(S_hat, x_axis=x_axis, y_axis=y_axis, sr=SR)
+    plt.colorbar()
+    plt.tight_layout()
+    plt.title(title)
+    return ax
 
 
 # Sequences
@@ -97,50 +108,3 @@ def running_agg(a, agg=lambda x, axis: x, window=10, hop_length=1, mode='edge',\
                 p_axis=-1, f_axis=-1, a_axis=1):
     framed = frame(a, m_frames=window, hop_length=hop_length, p_axis=p_axis, f_axis=f_axis)
     return agg(framed, axis=a_axis)
-
-
-# Display / Debug
-
-
-def crop(S, minf=0, maxf=-1, mint=0, maxt=-1):
-    maxf = S.shape[0] if maxf < 0 else maxf
-    maxt = S.shape[1] if maxt < 0 else maxt
-    return S[minf:maxf, mint:maxt]
-
-
-def dbspec(S):
-    S_hat = None
-    if S.dtype == np.complex64:
-        S_hat = a2db(abs(S)) + 40
-    elif S.min() >= 0 and S.dtype in (np.float, np.float32, np.float64, np.float_):
-        S_hat = a2db(S) + 40
-    else:
-        S_hat = S
-    return S_hat
-
-
-def show(S, figsize=(), y_axis="linear", x_axis='frames', title=""):
-    S_hat = dbspec(S)
-    # make sure we have only reals in db
-    if figsize:
-        plt.figure(figsize=figsize)
-    ax = specshow(S_hat, x_axis=x_axis, y_axis=y_axis, sr=22050)
-    plt.colorbar()
-    plt.tight_layout()
-    plt.title(title)
-    return ax
-
-
-def signal(S, hop_length=1024, gain=1.):
-    if S.dtype in (np.complex64, np.complex128):
-        return librosa.istft(S, hop_length=hop_length) * gain
-    else:
-        return griffinlim(S, hop_length=hop_length) * gain
-
-
-def audio(S, hop_length=1024, gain=1.):
-    if len(S.shape) > 1:
-        y = signal(S, hop_length=hop_length, gain=gain)
-        return ipd.display(ipd.Audio(y, rate=22050))
-    else:
-        return ipd.display(ipd.Audio(S * gain, rate=22050))

@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 from scipy.ndimage import convolve
 from scipy.linalg import block_diag
-from cafca.util import running_agg
+from cafca.transform.spectrum import smooth_2d
 
 
 def stft(file):
@@ -20,12 +20,6 @@ def selfmasked(y, hop=128, n_small=256, n_big=2048, margin=4, power=100):
     S_hat = np.pad(I.dot(S_small[1:]), ((1, 0), (0, 0)))
     S_hat = S_big * librosa.util.softmask(abs(S_big), abs(S_hat), power=power)
     return S_small, S_big, S_hat
-
-
-def smooth_2d(S, hw=2, vw=2, hagg=np.min, vagg=np.max):
-    out = running_agg(S, window=vw, agg=vagg, p_axis=0, f_axis=0, a_axis=1)
-    out = running_agg(out, window=hw, agg=hagg, p_axis=-1, f_axis=-1, a_axis=1)
-    return out
 
 
 def preprocess_for_pitch(X, ga=1000, hw=2, vw=2, hagg=np.min, vagg=np.max):

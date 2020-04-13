@@ -4,7 +4,7 @@ from cafca.util import flat_dir, is_audio_file
 from cafca.fft import FFT
 
 
-class FFTSet(object):
+class FFTSet(dict):
 
     def from_directory(self, directory, n_fft=N_FFT, hop_length=HOP_LENGTH,
                        sr=SR, max_n_samples=-1, recursive=False):
@@ -26,7 +26,7 @@ class FFTSet(object):
             if 0 < max_n_samples <= i:
                 break
             print("loading :", file, "at index", i)
-            self.ffts[i] = FFT.stft(file, n_fft, hop_length, sr)
+            self[i] = FFT.stft(file, n_fft, hop_length, sr)
             self.N += 1
         if self.N == 0:
             print("WARNING : no files were found in directory...")
@@ -39,7 +39,12 @@ class FFTSet(object):
                  sr=SR,
                  max_n_samples=-1,
                  recursive=True):
-        self.ffts = {}
+        super(FFTSet, self).__init__()
         self.N = 0
         self.from_directory(directory, n_fft=n_fft, hop_length=hop_length, sr=sr,
                             max_n_samples=max_n_samples, recursive=recursive)
+
+    @property
+    def names(self):
+        return {i: fft.file for i, fft in self.items()}
+

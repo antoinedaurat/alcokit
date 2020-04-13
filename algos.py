@@ -11,8 +11,8 @@ def harmonic_percussive(S, margin=1):
     D_h, D_p = librosa.decompose.hpss(S, margin=margin)
 
     if isinstance(S, FFT):
-        D_h = FFT.to_fft(D_h, S.hop, S.sr)
-        D_p = FFT.to_fft(D_p, S.hop, S.sr)
+        D_h = FFT.to_fft(D_h, S.hop_length, S.sr)
+        D_p = FFT.to_fft(D_p, S.hop_length, S.sr)
     return D_h, D_p
 
 
@@ -42,8 +42,8 @@ def REP_SIM(S,
     S_background = mask_b * S_full
 
     if isinstance(S, FFT):
-        S_foreground = FFT.to_fft(S_foreground, S.hop, S.sr)
-        S_background = FFT.to_fft(S_background, S.hop, S.sr)
+        S_foreground = FFT.to_fft(S_foreground, S.hop_length, S.sr)
+        S_background = FFT.to_fft(S_background, S.hop_length, S.sr)
 
     return S_background, S_foreground
 
@@ -116,13 +116,13 @@ def random_path(X, Y, D, wp,
         last_i = idx_getter(k, last_i % [maxt_x, maxt_y][k], d + 1)
 
         # join the audios :
-        z = signal(z, X.hop if isinstance(X, FFT) else HOP_LENGTH)
+        z = signal(z, X.hop_length if isinstance(X, FFT) else HOP_LENGTH)
         z[:xfade_dur] *= fade_in
         z[-xfade_dur:] *= fade_out
         pieces[-xfade_dur:] += z[:xfade_dur]
         pieces = np.concatenate((pieces, z[xfade_dur:]))
 
-    return audio(pieces, *((X.hop, X.sr) if isinstance(X, FFT) else (HOP_LENGTH, SR)))
+    return audio(pieces, *((X.hop_length, X.sr) if isinstance(X, FFT) else (HOP_LENGTH, SR)))
 
 
 def decompose(X,

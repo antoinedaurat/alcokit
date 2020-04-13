@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.stats as stats
 import librosa
-from cafca.util import normalize, frame, running_agg
+from cafca.util import normalize
+from cafca.transform.spectrum import frame, running_agg
 
 
 def as_novelty_f(graph, width=3, order=1, axis=0):

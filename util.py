@@ -66,6 +66,16 @@ def logistic_map(X, thresh=.1, strength=20):
 
 # Debugging utils
 
+def db(S):
+    if S.dtype == np.complex64:
+        S_hat = a2db(S.abs) + 40
+    elif S.min() >= 0 and S.dtype in (np.float, np.float32, np.float64, np.float_):
+        S_hat = a2db(S) + 40
+    else:
+        S_hat = a2db(S)
+    return S_hat
+
+
 def signal(S, hop_length=HOP_LENGTH):
     if S.dtype in (np.complex64, np.complex128):
         return librosa.istft(S, hop_length=hop_length)
@@ -76,14 +86,24 @@ def signal(S, hop_length=HOP_LENGTH):
 def audio(S, hop_length=HOP_LENGTH, sr=SR):
     if len(S.shape) > 1:
         y = signal(S, hop_length)
-        return ipd.display((ipd.Audio(y, rate=sr),))
+        return ipd.display(ipd.Audio(y, rate=sr))
     else:
-        return ipd.display((ipd.Audio(S, rate=sr),))
+        return ipd.display(ipd.Audio(S, rate=sr))
+
+
+def playlist(iterable):
+    for seg in iterable:
+        audio(seg)
+    return
+
+
+def playthrough(iterable, axis=1):
+    rv = np.concatenate(iterable, axis=axis)
+    return audio(rv)
 
 
 def show(S, figsize=(), to_db=True, y_axis="linear", x_axis='frames', title=""):
-    S_hat = S.db() if to_db else S
-    S_hat = S_hat if S.t_axis == 1 else S_hat.T
+    S_hat = db(S) if to_db else S
     if figsize:
         plt.figure(figsize=figsize)
     ax = specshow(S_hat, x_axis=x_axis, y_axis=y_axis, sr=SR)
@@ -91,20 +111,3 @@ def show(S, figsize=(), to_db=True, y_axis="linear", x_axis='frames', title=""):
     plt.tight_layout()
     plt.title(title)
     return ax
-
-
-# Sequences
-
-def frame(a, m_frames, hop_length=1, mode='edge', p_axis=-1, f_axis=-1):
-    a = librosa.util.pad_center(a, a.shape[p_axis] + m_frames - 1, mode=mode, axis=p_axis)
-    if f_axis == 0:
-        a = np.ascontiguousarray(a)
-    else:
-        a = np.asfortranarray(a)
-    return librosa.util.frame(a, frame_length=m_frames, hop_length=hop_length, axis=f_axis)
-
-
-def running_agg(a, agg=lambda x, axis: x, window=10, hop_length=1, mode='edge',\
-                p_axis=-1, f_axis=-1, a_axis=1):
-    framed = frame(a, m_frames=window, hop_length=hop_length, p_axis=p_axis, f_axis=f_axis)
-    return agg(framed, axis=a_axis)

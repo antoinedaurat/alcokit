@@ -1,8 +1,7 @@
 import librosa
 
-from cafca.dynamics import uni_split_point, split_right
-from cafca.pitch_tracking import *
-from cafca.util import b2m
+from cafca.extract.categories import uni_split_point, split_right
+from cafca.extract.pitch_tracking import *
 
 
 class PitchPipeline(object):

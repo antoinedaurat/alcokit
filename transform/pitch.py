@@ -16,7 +16,8 @@ def _shift_translate(S, k_bins):
     return D.T @ S
 
 
-def _shift_scale(S, rate):
+def _shift_scale(S, scale):
+    rate = 1 / scale
     n = S.shape[0]
     i_range = np.arange(n)
     j = i_range * rate
@@ -33,10 +34,14 @@ def _shift_scale(S, rate):
     return D.T @ S
 
 
-def _steps2rate(n_steps, bins_per_octave=12):
+def steps2rate(n_steps, bins_per_octave=12):
     if bins_per_octave < 1 or not np.issubdtype(type(bins_per_octave), np.integer):
         raise ValueError('bins_per_octave must be a positive integer.')
     return 2.0 ** (-float(n_steps) / bins_per_octave)
+
+
+def rate2steps(rate):
+    return np.log2(rate) * -12
 
 
 def _shift_vocoder(S, rate):
@@ -50,11 +55,16 @@ def _shift_vocoder(S, rate):
 
 def _shift_rubber(S, intv):  # TODO : DOES THIS SUPPORT QUARTER-TONES ??
     y = signal(S)
-    return stft(rb_shift(y, SR, intv), hop_length=HOP_LENGTH)
+    return stft(rb_shift(y, SR, rate2steps(intv)), hop_length=HOP_LENGTH)
 
 
 def shift(S, intv, method="voc"):
-    pass
+    funcs = {"trans": _shift_translate, "scale": _shift_scale, "rubber": _shift_rubber, "voc": _shift_vocoder}
+    if method not in funcs:
+        raise ValueError("'method' value '{}' not understood."
+                         "'method' arg should be one of ['trans', 'scale', 'voc', 'rubber']")
+    func = funcs[method]
+    return func(S, intv)
 
 
 def rotate(S, k, clip=True):

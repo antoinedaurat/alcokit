@@ -174,17 +174,17 @@ class SegmentList(list):
         for x, c in zip(n, counts):
             print("          ", x, " " * (10 - len(str(x))), c)
 
-    def mod_standardize(self, seg_len=None):
+    def mod_standardize(self, seg_len=None, method="rbs"):
         if seg_len is None:
             seg_len = self.expected_length()
         print("snapping all lengths to multiples of", seg_len)
-        return SegmentList(seg.stretch_to_mod(seg_len) for seg in self)
+        return SegmentList(seg.stretch_to_mod(seg_len, method) for seg in self)
 
-    def standardize(self, seg_len=None):
+    def standardize(self, seg_len=None, method="rbs"):
         if seg_len is None:
             seg_len = self.expected_length()
         print("snapping all lengths to length", seg_len)
-        return SegmentList(seg.stretch(seg_len) for seg in self)
+        return SegmentList(seg.stretch(seg_len, method) for seg in self)
 
     def trim_or_pad(self, seg_len=None, mode="edge"):
         if seg_len is None:

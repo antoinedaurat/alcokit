@@ -86,7 +86,10 @@ def signal(S, hop_length=HOP_LENGTH):
 def audio(S, hop_length=HOP_LENGTH, sr=SR):
     if len(S.shape) > 1:
         y = signal(S, hop_length)
-        return ipd.display(ipd.Audio(y, rate=sr))
+        if y.size > 0:
+            return ipd.display(ipd.Audio(y, rate=sr))
+        else:
+            return ipd.display(ipd.Audio(np.zeros(hop_length*2), rate=sr))
     else:
         return ipd.display(ipd.Audio(S, rate=sr))
 

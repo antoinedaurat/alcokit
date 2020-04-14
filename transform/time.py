@@ -38,7 +38,9 @@ def _stretch_hop(S, ratio):
 
 
 def _stretch_rbs(S, ratio):
-    time_indices = np.linspace(0, S.shape[1]-1, int(np.rint(ratio*S.shape[1])))
+    if S.shape[1] <= 1 or S.shape[0] <= 1:
+        return S
+    time_indices = np.linspace(0, S.shape[1]-1, int(np.rint(S.shape[1]/ratio)))
     if S.dtype in (np.complex64, np.complex128):
         mag, phase = abs(S), np.imag(S)
     else:

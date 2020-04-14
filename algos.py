@@ -11,8 +11,8 @@ def harmonic_percussive(S, margin=1):
     D_h, D_p = librosa.decompose.hpss(S, margin=margin)
 
     if isinstance(S, FFT):
-        D_h = FFT.to_fft(D_h, S.hop_length, S.sr)
-        D_p = FFT.to_fft(D_p, S.hop_length, S.sr)
+        D_h = FFT(D_h, S.hop_length, S.sr)
+        D_p = FFT(D_p, S.hop_length, S.sr)
     return D_h, D_p
 
 
@@ -42,17 +42,15 @@ def REP_SIM(S,
     S_background = mask_b * S_full
 
     if isinstance(S, FFT):
-        S_foreground = FFT.to_fft(S_foreground, S.hop_length, S.sr)
-        S_background = FFT.to_fft(S_background, S.hop_length, S.sr)
+        S_foreground = FFT(S_foreground, S.hop_length, S.sr)
+        S_background = FFT(S_background, S.hop_length, S.sr)
 
     return S_background, S_foreground
 
 
 def alignement(X, Y,
                compute_chroma=True,
-               metric='cosine',
-               figsize=(10, 10),
-               ):
+               metric='cosine'):
     if compute_chroma:
         x = librosa.feature.chroma_stft(S=abs(X), tuning=0, norm=2)
         y = librosa.feature.chroma_stft(S=abs(Y), tuning=0, norm=2)
@@ -61,11 +59,6 @@ def alignement(X, Y,
         y = abs(Y)
 
     D, wp = librosa.sequence.dtw(X=x, Y=y, metric=metric, subseq=True)
-
-    if figsize is not None:
-        show(D, figsize=figsize, title="costs matrix", x_axis="frames", y_axis="frames")
-        plt.plot(wp[:, 1], wp[:, 0], label='Optimal Path', color='green')
-        plt.legend()
 
     return D, wp[::-1]
 
@@ -77,9 +70,7 @@ def random_path(X, Y, D, wp,
                 n_crossing=3,
                 min_step_duration=2.,
                 max_step_duration=2.,  # or float
-                xfade_dur=.1,
-                ordered=True,
-                show_result=False,
+                xfade_dur=.1
                 ):
     min_step_duration = int(t2f(min_step_duration, sr=22050, hop_length=1024))
     if max_step_duration is None:
@@ -126,13 +117,11 @@ def random_path(X, Y, D, wp,
 
 
 def decompose(X,
-              mode=0,  # 0 = learn to output component, 1 = learn to output score
               n_components=50,
               comp_length=1,
               max_iter=200,
               regularization=0.,
               seed=1,
-              figsize=(12, 4),
               ):
     if X.dtype == np.complex64:
         X = abs(X)
@@ -149,15 +138,7 @@ def decompose(X,
         max_iter=max_iter, alpha=regularization,
         random_state=seed)
     C, S, _ = nmf(X)
-    rec = recompose(C, S, F)
 
-    if figsize is not None:
-        show(X, title="original", figsize=figsize)
-        show(C, title="components", figsize=figsize, y_axis="linear")
-        show(S, title="score", figsize=figsize, x_axis=None, y_axis="linear")
-        show(rec, title="reconstruction", figsize=figsize)
-    print("reconstruction")
-    audio(rec)
     return C, S
 
 

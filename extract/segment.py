@@ -6,7 +6,7 @@ from scipy.interpolate import RectBivariateSpline as RBS
 from scipy.ndimage import convolve
 from cafca.util import audio, playlist, playthrough
 from cafca.fft import FFT
-from cafca.transform.time import stretch
+from cafca.transform.time import stretch as time_stretch
 
 
 def checker(N):
@@ -74,40 +74,11 @@ def is_multiple(x, m):
     return x != (np.rint(x / m) * m)
 
 
-def stretched_range(n, k):
-    return np.linspace(0, n - 1, k)
-
-
-def time_stretch(S, time_indices):
-    if S.dtype in (np.complex64, np.complex128):
-        mag, phase = abs(S), np.imag(S)
-    else:
-        mag, phase = S, None
-    spline = RBS(np.arange(S.shape[0]), np.arange(S.shape[1]), mag)
-    interp = spline.ev(np.arange(S.shape[0])[:, None], time_indices)
-    if S.dtype in (np.complex64, np.complex128):
-        # small random phases since to be working best...
-        interp_p = np.random.randn(*interp.shape) * .001
-        return (interp + (interp_p * 1j)).astype(S.dtype)
-    else:
-        return interp
-
-
-def stretch_slices(o_lenghts, t_lengths):
-    slices = []
-    for o, t in zip(o_lenghts, t_lengths):
-        if o == t:
-            slices += np.arange(o)
-        else:
-            slices += stretched_range(o, t)
-    return slices
-
-
 class Segment(FFT):
     def __new__(cls, fft, i):
         obj = fft.view(cls)
         obj.n = obj.shape[1]
-        obj.i = None
+        obj.i = i
         return obj
 
     def __array_finalize__(self, obj):
@@ -127,19 +98,17 @@ class Segment(FFT):
         elif getattr(n, "__iter__", None) is not None:
             return self.nearest_len(n) if not mod else self.nearest_len_by_mod(n)
 
-    def stretch(self, m):
+    def stretch(self, m, method="rbs"):
         m = self._check_target(m, mod=False)
-        s_range = stretched_range(self.n, m)
-        return time_stretch(abs(self), s_range)
+        return Segment(time_stretch(self, self.n/m, method), self.i)
 
-    def stretch_to_mod(self, m):
+    def stretch_to_mod(self, m, method="rbs"):
         m = self._check_target(m, mod=True)
-        s_range = stretched_range(self.n, nearest_multiple(self.n, m))
-        return time_stretch(abs(self), s_range)  # taking the abs simplifies stretching
+        return Segment(time_stretch(self, self.n/nearest_multiple(self.n, m), method), self.i)
 
     def trim(self, n):
         n = self._check_target(n, mod=False)
-        return self[:, :n].view(Segment)
+        return Segment(self[:, :n], self.i)
 
     def trim_to_mod(self, m):
         m = self._check_target(m, mod=True)
@@ -148,7 +117,7 @@ class Segment(FFT):
 
     def pad(self, n, mode="edge"):
         n = self._check_target(n, mod=False)
-        return np.pad(self, ((0, 0), (0, abs(self.n - n))), mode=mode)
+        return Segment(np.pad(self, ((0, 0), (0, abs(self.n - n))), mode=mode), self.i)
 
     def pad_to_mod(self, m, mode="edge"):
         m = self._check_target(m, mod=True)
@@ -184,9 +153,12 @@ class Segment(FFT):
 class SegmentList(list):
 
     def __init__(self, sample=None, **kwargs):
-        _, _, _, slices = segment_from_recurrence_matrix(abs(sample), **kwargs)
-        super(SegmentList, self).__init__(Segment(sample[:, slice], i) for i, slice in enumerate(slices))
-        print("found", len(self), "segments")
+        if isinstance(sample, FFT) or isinstance(sample, np.ndarray):
+            _, _, _, slices = segment_from_recurrence_matrix(abs(sample), **kwargs)
+            super(SegmentList, self).__init__(Segment(sample[:, slice], i) for i, slice in enumerate(slices))
+            print("found", len(self), "segments")
+        else:
+            super(SegmentList, self).__init__(sample)
 
     @property
     def slices(self):

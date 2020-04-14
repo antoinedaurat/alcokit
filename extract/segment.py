@@ -2,9 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from librosa.segment import recurrence_matrix
 from librosa.util import localmax
-from scipy.interpolate import RectBivariateSpline as RBS
 from scipy.ndimage import convolve
-from cafca.util import audio, playlist, playthrough
+from cafca.util import playlist, playthrough
 from cafca.fft import FFT
 from cafca.transform.time import stretch as time_stretch
 

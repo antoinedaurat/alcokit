@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# TODO : add handling of sparse features ?
+# TODO : add handling of sparse matrices ?
 
 
 def _file_to_db(abs_path, extract_func):
@@ -57,14 +57,14 @@ def _collect_segments_metadata(metadata):
     return pd.concat(frames, sort=False)
 
 
-def _aggregate_from_metadata(target_file, metadata, exclude=None, **kwargs):
+def _aggregate_from_metadata(target_file, metadata, mode="w", exclude=None, **kwargs):
     if exclude is None:
         exclude = set()
     features = [col for col in metadata.columns if col not in exclude]
     metas = {feature: (list(set([meta[0] for meta in metadata[feature]]))[0],
                        np.array([meta[1:] for meta in metadata[feature]]))
              for feature in features}
-    with h5py.File(target_file, "w") as f:
+    with h5py.File(target_file, mode) as f:
         f.attrs["features"] = list(metas.keys())
         for feature, (dtype, shapes) in metas.items():
             feature_meta = {}
@@ -76,20 +76,26 @@ def _aggregate_from_metadata(target_file, metadata, exclude=None, **kwargs):
             feature_ds = f.create_dataset(feature + "/data", dtype=dtype, shape=total_shape, **kwargs)
             attrs = set()  # all the tmp_dbs should have the same attrs, that's why we only keep track of unique items
             for i, file in zip(range(len(offsets)), metadata.index):
-                sub_db = h5py.File(file, "r")
+                sub_db = h5py.File(file, "r+")
                 start, stop = offsets[i], offsets[i] + shapes[i, 0]
                 feature_ds[start:stop] = sub_db[feature][()]
                 attrs = attrs.union(set(sub_db[feature].attrs.items()))
+                del sub_db[feature]
+                sub_db.flush()
                 sub_db.close()
                 f.flush()
                 # {file: {feature: (start, stop, dur)}}
                 file = file.strip(".h5")
                 feature_meta[file] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
+            for key, value in attrs:
+                feature_ds.attrs[key] = value
+            # this will be handy to figure out batch_size when iterating/querying etc.
+            feature_ds.attrs["axis0_nbytes"] = feature_ds[0].nbytes
+            f.flush()
             feature_meta = pd.DataFrame.from_dict(feature_meta, orient="index")
             feature_meta.to_hdf(target_file, feature+"/metadata", "r+")
         for file in metadata.index:
             os.remove(file)
-
     f.close()
     return None
 
@@ -99,14 +105,14 @@ def _add_metadata(db_path, key, metadata):
     return None
 
 
-def db_factory(root_directory, target_file, extract_func, n_cores=cpu_count(), segmented=True, **kwargs):
+def db_factory(root_directory, target_file, mode, extract_func, n_cores=cpu_count(), segmented=True, **kwargs):
     logger.info("storing features in temp dbs")
     tmp_metadata = _make_temp_dbs(root_directory, extract_func, n_cores)
 
     segments_metadata = _collect_segments_metadata(tmp_metadata) if segmented else None
 
     logger.info("copying temp dbs to target file")
-    _aggregate_from_metadata(target_file, tmp_metadata, ["segments"] if segmented else None, **kwargs)
+    _aggregate_from_metadata(target_file, tmp_metadata, mode, ["segments"] if segmented else None, **kwargs)
 
     if segments_metadata is not None:
         _add_metadata(target_file, "segments", segments_metadata)

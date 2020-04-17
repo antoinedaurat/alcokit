@@ -7,8 +7,10 @@ from sklearn.neighbors import KNeighborsTransformer
 from cafca.util import is_audio_file
 from cafca.fft import FFT
 from cafca.extract.segment import SegmentList
+import librosa
 from multiprocessing import cpu_count, Pool
 import numpy as np
+import pandas as pd
 from torch.utils.data import DataLoader
 from torch import from_numpy, cuda, device as torch_device
 from torch.nn.utils.rnn import pack_sequence
@@ -21,10 +23,6 @@ warnings.filterwarnings("ignore")
 '''
 
 
-def audio_fs_dict(root):
-    root_name = os.path.split(root.strip("/"))[-1]
-    items = [(d, list(filter(is_audio_file, f))) for d, _, f in os.walk(root)]
-    return root_name, dict(item for item in items if len(item[1]) > 0)
 
 
 class HdBase(object):
@@ -200,26 +198,72 @@ class SegmentDB(HdBase):
 
     @staticmethod
     def data_transform(abs_path, **kwargs):
-        fft = FFT.stft(abs_path).abs
-        slices = SegmentList(fft, **kwargs).slices
+        fft = FFT.stft(abs_path)
+        chroma = librosa.feature.chroma_stft(S=fft, hop_length=fft.hop_length)
+        slices = SegmentList(fft.abs, **kwargs).slices
         print("done with", abs_path)
-        return fft, slices
+        return fft.abs, chroma, np.array([s[0] for s in slices] + [slices[-1][-1]])
 
     def pre_process(self, root_dir, rel_file_path):
         print("processing", os.path.split(rel_file_path)[-1])
         abs_path = root_dir + rel_file_path
-        fft, slices = self.data_transform(abs_path)
+        fft, chroma, slices = self.data_transform(abs_path)
         tmp_db = ".".join(abs_path.split(".")[:-1] + ["h5"])
         with h5py.File(tmp_db, "w") as f:
-            # store the fft
-            frames = f.create_dataset(rel_file_path + "/frames", shape=fft.shape, data=fft,
-                                      **self.compression_args)
-            # store each slice as 1d array in its own dataset so as to give them matchable names
-            for i, s in enumerate(slices):
-                f.create_dataset(rel_file_path + "/_s" + str(i) + "_n" + str(len(s)),
-                                 shape=s.shape, data=s)
-            f.close()
+            f.attrs["name"] = rel_file_path
+            f.create_dataset("fft", shape=fft.shape, data=fft)
+            f.create_dataset("chroma", shape=chroma.shape, data=chroma)
+            f.create_dataset("segments", shape=slices.shape, data=slices)
+        f.close()
         return tmp_db
+
+    def make(self, root_directory,
+             n_cores=cpu_count()):
+        target_file = self.h5_file
+        root_name, tree = audio_fs_dict(root_directory)
+        print(root_name)
+        args = [(root_directory, os.path.join(os.path.relpath(dir, root_directory), file))
+                for dir, files in tree.items() for file in files]
+        with Pool(n_cores) as p:
+            tmp_dbs = p.starmap(self.pre_process, args)
+        print("getting metadatas")
+        metadata = []
+        i = 0
+        F, C = None, None
+        f_dtype, c_dtype = None, None
+        for file_idx, db in enumerate(tmp_dbs):
+            db = h5py.File(db, "r")
+            file_name = db.attrs["name"]
+            ln = db["fft"].shape[1]
+            if F is None:
+                F, C = db["fft"].shape[0], db["chroma"].shape[0]
+                f_dtype, c_dtype = db["fft"].dtype, db["chroma"].dtype
+            segs = list(zip(db["segments"][:-1], np.diff(db["segments"][()])))
+            # (file, global_index, ordinal_index, duration)
+            metadata += [(file_name, False, file_idx, i, i+ln, ln)]
+            metadata += [(file_name, True, ord_index, index+i, index+i+dur, dur) for ord_index, (index, dur) in enumerate(segs)]
+            i += ln
+            db.close()
+        metadata = pd.DataFrame(metadata, columns=["name", "is_seg", "idx", "start", "stop", "dur"])
+        print("saving results in .h5 file")
+        f = h5py.File(target_file, "w")
+        metadata.to_hdf(target_file, key="metadata", mode="r+")
+        fft = f.create_dataset("fft", shape=(i, F), dtype=f_dtype, **self.compression_args)
+        chroma = f.create_dataset("chroma", shape=(i, C), dtype=c_dtype, **self.compression_args)
+        i = 0
+        for db in tmp_dbs:
+            db = h5py.File(db, "r")
+            ln = db["fft"].shape[1]
+            fft[i:i+ln] = db["fft"][()].T
+            chroma[i:i+ln] = db["chroma"][()].T
+            i += ln
+            name = db.filename
+            db.close()
+            os.remove(name)
+            f.flush()
+        f.close()
+        print("Done")
+        return HdBase(target_file)
 
     def __getitem__(self, args):
         """

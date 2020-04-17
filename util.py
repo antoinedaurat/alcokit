@@ -21,6 +21,12 @@ def flat_dir(directory):
     return sorted(files)
 
 
+def audio_fs_dict(root):
+    root_name = os.path.split(root.strip("/"))[-1]
+    items = [(d, list(filter(is_audio_file, f))) for d, _, f in os.walk(root)]
+    return root_name, dict(item for item in items if len(item[1]) > 0)
+
+
 # Conversion
 
 normalize = librosa.util.normalize

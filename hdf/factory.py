@@ -37,65 +37,87 @@ def _make_temp_dbs(root_directory,
             for dir, files in tree.items() for file in files]
     with Pool(n_cores) as p:
         tmp_dbs = p.starmap(_file_to_db, args)
-    return pd.DataFrame.from_dict(dict(tmp_dbs), orient="index")
+    df = pd.DataFrame.from_dict(dict(tmp_dbs), orient="index")
+    df.index.name = "file"
+    return df
 
 
 def _collect_segments_metadata(metadata):
     logger.info("collecting segments' metadata")
     files = list(metadata.index)
     frames = []
+    offset = 0
     for file in files:
         with h5py.File(file, "r") as f:
             segments = f["segments"][()]
             # last elements in segments should always be the length of the whole segmented data
             durations = np.diff(segments)
-            index = pd.MultiIndex.from_product([[file], range(len(durations))], names=["file", "index"])
-            # (start, stop, duration)
-            data = list(zip(range(len(durations)), segments[:-1], np.cumsum(durations), durations))
-            frames += [pd.DataFrame(data, index=index, columns=["index", "start", "stop", "duration"])]
+            index = pd.MultiIndex.from_product([[file.strip(".h5")], range(len(durations))], names=["file", "index"])
+            # get the metadata (file, index, start, stop, duration)
+            data = list(zip(offset + segments[:-1], offset + np.cumsum(durations), durations))
+            df = pd.DataFrame(data, index=index, columns=["start", "stop", "duration"])
+            # add (file, index) as columns
+            df = df.reset_index()
+            frames += [df]
+            # increment the start-index for the next file
+            offset += segments[-1]
             f.close()
-    return pd.concat(frames, sort=False)
+    return pd.concat(frames, ignore_index=True)
 
 
 def _aggregate_from_metadata(target_file, metadata, mode="w", exclude=None, **kwargs):
     if exclude is None:
         exclude = set()
     features = [col for col in metadata.columns if col not in exclude]
+    # for each feature, collect the dtype and the shapes of all the files
     metas = {feature: (list(set([meta[0] for meta in metadata[feature]]))[0],
                        np.array([meta[1:] for meta in metadata[feature]]))
              for feature in features}
     with h5py.File(target_file, mode) as f:
-        f.attrs["features"] = list(metas.keys())
         for feature, (dtype, shapes) in metas.items():
-            feature_meta = {}
+            meta = {}
             logger.info("copying %s" % feature)
             assert np.all(shapes[:, 1:] == shapes[0, 1:])
+            # get the shape of the aggregated DS
             offsets = np.cumsum(shapes[:, 0])
             total_shape = (offsets[-1], *shapes[0, 1:])
             offsets = np.r_[0, offsets[:-1]]
+            # create the ds
             feature_ds = f.create_dataset(feature + "/data", dtype=dtype, shape=total_shape, **kwargs)
-            attrs = set()  # all the tmp_dbs should have the same attrs, that's why we only keep track of unique items
+            # all the tmp_dbs should have the same attrs so we only keep track of unique items
+            attrs = set()
+            # copy each file
             for i, file in zip(range(len(offsets)), metadata.index):
+                # get the source
                 sub_db = h5py.File(file, "r+")
+                # get the slice
                 start, stop = offsets[i], offsets[i] + shapes[i, 0]
+                # copy
                 feature_ds[start:stop] = sub_db[feature][()]
+                # intersect the attrs
                 attrs = attrs.union(set(sub_db[feature].attrs.items()))
+                # clean up
                 del sub_db[feature]
                 sub_db.flush()
                 sub_db.close()
                 f.flush()
-                # {file: {feature: (start, stop, dur)}}
+                # store the metadata of this file
                 file = file.strip(".h5")
-                feature_meta[file] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
+                meta[file] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
+            # add attrs to the DS
             for key, value in attrs:
                 feature_ds.attrs[key] = value
             # this will be handy to figure out batch_size when iterating/querying etc.
             feature_ds.attrs["axis0_nbytes"] = feature_ds[0].nbytes
             f.flush()
-            feature_meta = pd.DataFrame.from_dict(feature_meta, orient="index")
-            feature_meta.to_hdf(target_file, feature+"/metadata", "r+")
+            # store the metadata for the whole feature
+            meta = pd.DataFrame.from_dict(meta, orient="index")
+            meta.index.name = "file"
+            meta.reset_index().to_hdf(target_file, feature+"/metadata", "r+")
+        # clean up
         for file in metadata.index:
             os.remove(file)
+        metadata.reset_index().to_hdf(target_file, "meta", "r+")
     f.close()
     return None
 

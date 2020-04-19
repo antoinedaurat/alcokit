@@ -19,7 +19,7 @@ def ssts(item):
     @param item: a pd.DataFrame with a "start" and a "stop" column (typically the metadata of a db)
     @return: 1d array of slices for retrieving each element in `item`
     """
-    arr = item[['start', 'stop']].values
+    arr = np.atleast_2d(item[['start', 'stop']].values)
     slices = np.apply_along_axis(lambda a: slice(a[0], a[1]), 1, arr)
     return slices
 
@@ -42,7 +42,7 @@ def irbol(item, batch_size=64, shuffle=False, drop_last=False):
         return np.split(slices, np.r_[batch_size * (np.arange(n_batch) + 1), N-rem])
 
 
-def ibol(item, batch_size=64, shuffle=False, drop_last=False):
+def ibol(item, batch_size=64, drop_last=False):
     """
     In Batches Of Length
     """
@@ -83,3 +83,18 @@ def reduce_2d(arr_2d, splits_i, splits_j, reduce_func=np.mean, n_jobs=cpu_count(
     with Pool(n_jobs) as p:
         rows = p.starmap(_mp_block_reduce, args)
     return np.stack(rows)
+
+
+def iterate(item, level, batch_type, shuffle=False, drop_last=True):
+    if level == "frame":
+        if batch_type == "dur":
+            pass
+        elif batch_type == "len":
+            pass
+        return None
+    elif level == "segment":
+        pass
+    elif level == "file":
+        pass
+    else:
+        pass

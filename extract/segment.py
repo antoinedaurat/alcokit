@@ -43,8 +43,11 @@ def segment_from_recurrence_matrix(X,
     mx = mx * (np.diff(mx, prepend=0) >= min_dur)
     mx = mx[mx > 0]
     # print(mx)
-    # first index is leading silence and last index is always a peak
     slices = np.split(np.arange(R.shape[0]), mx)
+    # last slice MAY be just the final index
+    if len(slices[-1]) == 1:
+        slices[-2] = np.concatenate(slices[-2:])
+        slices = slices[:-1]
     return mx, R, dg, slices
 
 

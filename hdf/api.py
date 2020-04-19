@@ -3,30 +3,53 @@ import numpy as np
 import pandas as pd
 from multiprocessing import cpu_count
 from cafca.extract.similarity import cos_sim_graph
-from cafca.hdf.iter_utils import ssts, dts, reduce_2d
+from cafca.hdf.iter_utils import ssts, dts, reduce_2d, irbod, ibod
+from torch.utils.data import DataLoader, Dataset
+import re
 
 
-class FeatureProxy(object):
+class FeatureProxy(Dataset):
     def __init__(self, h5_file, ds_name, segments=None):
         self.h5_file = h5_file
         self.name = ds_name
         self.segs = segments
         self.meta = self._get_metadata()
+        self.iter_meta = self.meta
         with h5py.File(h5_file, "r") as f:
             ds = f[self.name + "/data"]
             attrs = {k: v for k, v in ds.attrs.items()}
         self.attrs = attrs
         self.N = self.meta["duration"].sum()
+        self.level = "file"
 
     def __len__(self):
         return self.N
+
+    def __call__(self, level):
+        if level == "files":
+            self.iter_meta = self.meta
+        elif level == "segs":
+            self.iter_meta = self.segs
+        elif level == "frames":
+            rg = np.arange(self.N)
+            self.iter_meta = pd.DataFrame(np.stack((rg, rg + 1)).T, columns=["start", "stop"])
+        self.level = level
+        return self
 
     def _get_metadata(self):
         return pd.read_hdf(self.h5_file, key=self.name + "/metadata")
 
     def save_metadata(self):
-        # TODO
-        pass
+        with h5py.File(self.h5_file, "r+") as f:
+            del f[self.name + "/metadata"]
+        self.meta.to_hdf(self.h5_file, key=self.name + "/metadata", mode="r+")
+        return self._get_metadata()
+
+    def match(self, item):
+        item_ = re.compile(item) if type(item) is str else item
+        has_name = self.iter_meta["name"].str.contains(item_)
+        has_dir = self.iter_meta["directory"].str.contains(item_)
+        return self.iter_meta[has_dir | has_name]
 
     @staticmethod
     def _gen_slices(item):
@@ -34,7 +57,25 @@ class FeatureProxy(object):
             yield slice(loc["start"], loc["stop"])
 
     def gen_item(self, item):
-        if type(item) in (int, tuple, list, slice, np.ndarray):
+        """
+        """
+        if type(item) is int:
+            # get the data for this iloc
+            with h5py.File(self.h5_file, "r") as f:
+                series = self.iter_meta.iloc[item]
+                yield f[self.name + "/data"][series["start"]:series["stop"]]
+        elif type(item) in (str, re.Pattern):
+            # find matching locs in the columns "directory' and 'name'
+            matches = self.match(item)
+            if not matches.empty:
+                items = ssts(matches)
+                with h5py.File(self.h5_file, "r") as f:
+                    for item_ in items:
+                        yield f[self.name + "/data"][item_]
+            else:
+                raise ValueError("no match found in the columns 'directory' and 'name' for '%s'" % item)
+        elif type(item) in (tuple, list, slice, np.ndarray):
+            # straight to dataset
             with h5py.File(self.h5_file, "r") as f:
                 yield f[self.name + "/data"][item]
         elif isinstance(item, pd.DataFrame):
@@ -47,7 +88,7 @@ class FeatureProxy(object):
                 if item.index[0] == self.segs.index[0]:  # let's hope this is safe enough and not too much limiting...
                     items = ssts(self.segs[item])
                 else:
-                    items = ssts(self.meta[item])
+                    items = ssts(self.iter_meta[item])
                 with h5py.File(self.h5_file, "r") as f:
                     for item in items:
                         yield f[self.name + "/data"][item]
@@ -57,7 +98,24 @@ class FeatureProxy(object):
             raise ValueError("type of item passed to `gen_item` not recognised: {}".format(type(item)))
 
     def __getitem__(self, item):
-        return [res for res in self.gen_item(item)]
+        rv = [res for res in self.gen_item(item)]
+        if len(rv) <= 1:
+            return rv[0]
+        return rv
+
+    def iterate(self, level, mode="length", **kwargs):
+        if mode == "duration":
+            self(level)
+            batches = irbod(self.iter_meta,
+                            kwargs.get("batch_size", 1),
+                            kwargs.get("shuffle", False),
+                            kwargs.get("drop_last", True))
+            kwargs["collate_fn"] = kwargs.get("collate_fn", list)
+            for idx_batch in batches:
+                print(idx_batch)
+                yield kwargs["collate_fn"](self[b] for b in idx_batch)
+        else:
+            return DataLoader(self(level), **kwargs)
 
     def neighbors(self, item_x, item_y=None, param=None, mode="best",
                   n_jobs=cpu_count()):

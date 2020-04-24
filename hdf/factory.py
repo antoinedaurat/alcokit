@@ -75,8 +75,9 @@ def _collect_slices_metadatas_from(files, keywords):
                 segments = f[name][()]
                 # last elements in segments should always be the length of the whole segmented data
                 durations = np.diff(segments)
-                index = pd.MultiIndex.from_product([[file.strip(".h5")], range(len(durations))],
-                                                   names=["file", "index"])
+                file = split_path(file)
+                index = pd.MultiIndex.from_product([[file[0]], [file[1].strip(".h5")], range(len(durations))],
+                                                   names=["directory", "name", "index"])
                 # get the metadata (file, index, start, stop, duration)
                 data = list(zip(offset + segments[:-1], offset + np.cumsum(durations), durations))
                 df = pd.DataFrame(data, index=index, columns=["start", "stop", "duration"])
@@ -124,7 +125,7 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
                 f.flush()
                 # store the metadata of this file
                 file = split_path(file)
-                meta[file] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
+                meta[(file[0], file[1].strip(".h5"))] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
             # add attrs to the DS
             for key, value in attrs:
                 feature_ds.attrs[key] = value

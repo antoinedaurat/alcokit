@@ -158,7 +158,7 @@ class SegmentList(list):
         if isinstance(sample, FFT) or isinstance(sample, np.ndarray):
             _, _, _, slices = segment_from_recurrence_matrix(abs(sample), **kwargs)
             super(SegmentList, self).__init__(Segment(sample[:, slice], i) for i, slice in enumerate(slices))
-            print("found", len(self), "segments")
+            # print("found", len(self), "segments")
         else:
             super(SegmentList, self).__init__(sample)
 

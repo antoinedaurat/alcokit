@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", message="PySoundFile failed. Trying audioread instead.")
+
 
 # Constants
 # those are shared and imported everywhere. Having them here makes it easier

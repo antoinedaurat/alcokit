@@ -6,9 +6,9 @@ from multiprocessing import cpu_count, Pool
 from cafca.util import audio_fs_dict
 import logging
 
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
 
 # TODO : add handling of sparse matrices ?
 
@@ -17,7 +17,7 @@ def sizeof_fmt(num, suffix='b'):
     """
     straight from https://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
     """
-    for unit in ['','k','M','G','T','P','E','Z']:
+    for unit in ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z']:
         if abs(num) < 1024.0:
             return "%3.1f%s%s" % (num, unit, suffix)
         num /= 1024.0
@@ -55,43 +55,43 @@ def _make_temp_dbs(root_directory,
     with Pool(n_cores) as p:
         tmp_dbs = p.starmap(_file_to_db, args)
     df = pd.DataFrame.from_dict({split_path(file): {(f, k): val for f, d in features.items()
-                                        for k, val in d.items()}
+                                                    for k, val in d.items()}
                                  for file, features in tmp_dbs},
                                 orient="index")
     df = df.rename_axis(index=["directory", "name"])
     return df
 
 
-def _collect_segments_metadata(metadata):
+def _collect_slices_metadatas_from(files, keywords):
     logger.info("collecting segments' metadata")
-    files = list(metadata.index)
-    frames = []
-    offset = 0
-    for file in files:
-        # join directory and file_name
-        file = "/".join(file)
-        with h5py.File(file, "r") as f:
-            segments = f["segments"][()]
-            # last elements in segments should always be the length of the whole segmented data
-            durations = np.diff(segments)
-            index = pd.MultiIndex.from_product([[file.strip(".h5")], range(len(durations))],
-                                               names=["file", "index"])
-            # get the metadata (file, index, start, stop, duration)
-            data = list(zip(offset + segments[:-1], offset + np.cumsum(durations), durations))
-            df = pd.DataFrame(data, index=index, columns=["start", "stop", "duration"])
-            # add (file, index) as columns
-            df = df.reset_index()
-            frames += [df]
-            # increment the start-index for the next file
-            offset += segments[-1]
-            f.close()
-    return pd.concat(frames, ignore_index=True)
+    metadatas = {}
+    for name in keywords:
+        frames = []
+        offset = 0
+        for file in files:
+            # join directory and file_name
+            file = "/".join(file)
+            with h5py.File(file, "r") as f:
+                segments = f[name][()]
+                # last elements in segments should always be the length of the whole segmented data
+                durations = np.diff(segments)
+                index = pd.MultiIndex.from_product([[file.strip(".h5")], range(len(durations))],
+                                                   names=["file", "index"])
+                # get the metadata (file, index, start, stop, duration)
+                data = list(zip(offset + segments[:-1], offset + np.cumsum(durations), durations))
+                df = pd.DataFrame(data, index=index, columns=["start", "stop", "duration"])
+                # add (file, index) as columns
+                df = df.reset_index()
+                frames += [df]
+                # increment the start-index for the next file
+                offset += segments[-1]
+                f.close()
+        metadatas[name] = pd.concat(frames, ignore_index=True)
+    return metadatas
 
 
-def _aggregate_from_metadata(target_file, metadata, mode="w", exclude=None, **kwargs):
-    if exclude is None:
-        exclude = set()
-    features = set([col for col in metadata.T.index.get_level_values(0) if col not in exclude])
+def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
+    features = set([col for col in metadata.T.index.get_level_values(0)])
     with h5py.File(target_file, mode) as f:
         for feature in features:
             dtype = metadata[feature, "dtype"].unique().item()
@@ -120,8 +120,6 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", exclude=None, **kw
                 # intersect the attrs
                 attrs = attrs.union(set(sub_db[feature].attrs.items()))
                 # clean up
-                del sub_db[feature]
-                sub_db.flush()
                 sub_db.close()
                 f.flush()
                 # store the metadata of this file
@@ -136,12 +134,7 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", exclude=None, **kw
             # store the metadata for the whole feature
             meta = pd.DataFrame.from_dict(meta, orient="index")
             meta = meta.rename_axis(index=["directory", "name"])
-            meta.reset_index().to_hdf(target_file, feature+"/metadata", "r+")
-        # clean up
-        for file in metadata.index:
-            # join directory and file_name
-            file = "/".join(file)
-            os.remove(file)
+            meta.reset_index().to_hdf(target_file, feature + "/metadata", "r+")
         metadata = metadata.reset_index()
         metadata.to_hdf(target_file, "meta", "r+")
     f.close()
@@ -153,20 +146,24 @@ def _add_metadata(db_path, key, metadata):
     return None
 
 
-def db_factory(root_directory, target_file, mode, extract_func, n_cores=cpu_count(), segmented=True, **kwargs):
+def db_factory(root_directory, target_file, mode, extract_func, axis0_kws=None, n_cores=cpu_count(), **kwargs):
     logger.info("storing features in temp dbs")
     tmp_metadata = _make_temp_dbs(root_directory, extract_func, n_cores)
 
-    segments_metadata = _collect_segments_metadata(tmp_metadata) if segmented else None
-
     logger.info("copying temp dbs to target file")
-    _aggregate_from_metadata(target_file, tmp_metadata, mode, ["segments"] if segmented else None, **kwargs)
+    _aggregate_from_metadata(target_file, tmp_metadata, mode, **kwargs)
 
-    if segments_metadata is not None:
-        _add_metadata(target_file, "segments", segments_metadata)
+    if axis0_kws is not None:
+        axis0_metadata = _collect_slices_metadatas_from(list(tmp_metadata.index), axis0_kws)
+        for name, meta in axis0_metadata.items():
+            meta.to_hdf(target_file, key=name + "_m", mode="r+")
+
+    # clean up
+    for file in tmp_metadata.index:
+        # join directory and file_name
+        file = "/".join(file)
+        os.remove(file)
 
     logger.info("done! following Groups and Datasets are now stored in '{}':".format(target_file))
     h5py.File(target_file, "r").visititems(lambda x, obj: logger.info("name={} ; object={}".format(x, str(obj))))
     return target_file
-
-

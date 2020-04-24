@@ -24,6 +24,8 @@ def flat_dir(directory):
 def audio_fs_dict(root):
     root_name = os.path.split(root.strip("/"))[-1]
     items = [(d, list(filter(is_audio_file, f))) for d, _, f in os.walk(root)]
+    if not items:
+        raise ValueError("no audio files found on path %s" % root)
     return root_name, dict(item for item in items if len(item[1]) > 0)
 
 

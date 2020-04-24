@@ -127,3 +127,4 @@ def mask_from_frame(x, strength=1):
     if len(mask.shape) == 1:
         mask = mask[:, None]
     return mask
+

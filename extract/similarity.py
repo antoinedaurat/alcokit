@@ -1,5 +1,7 @@
 import sklearn.neighbors as knn
 from multiprocessing import cpu_count
+from cafca.extract.utils import reduce_2d
+import numpy as np
 
 
 def _get_estimator(param=1, mode="best", n_jobs=cpu_count()):
@@ -23,6 +25,34 @@ def cos_sim_graph(X, Y=None, param=1, mode="best", n_jobs=cpu_count()):
     nn = _get_estimator(param, mode, n_jobs)
     nn.fit(Y)
     return nn.transform(X)
+
+
+def segments_sim(X, splits_x, Y=None, splits_y=None, param=1, mode="best", n_jobs=cpu_count()):
+    """
+
+    @param X:
+    @param splits_x:
+    @param Y:
+    @param splits_y:
+    @param param:
+    @param mode:
+    @param n_jobs:
+    @return: a list of arrays where each array_i corresponds to the neighbors (indices in the array splits_y)
+            of the segment splits_x_i-1:splits_x_i
+    """
+    G = cos_sim_graph(X, Y, param, mode, n_jobs)
+    G = reduce_2d(G, splits_x, splits_y, np.mean, subst_zeros=lambda x: param, n_jobs=n_jobs)
+    locs = None
+    if mode == "best":
+        idx = np.argsort(G, axis=1)[:, :param]
+        locs = [neighbors for neighbors in idx]
+    elif mode == "radius":
+        locs = []
+        for row in G:
+            idx = np.argsort(row)
+            less_than = idx[row[idx] <= param]
+            locs += [less_than]
+    return locs
 
 
 def cos_sim_neighbors(X, Y=None, param=1, mode="best", n_jobs=cpu_count(), return_distances=True):

@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from multiprocessing import cpu_count
-from cafca.extract.similarity import segments_sim, cos_sim_graph
+from cafca.extract.similarity import cos_sim_graph, segments_sim
 from cafca.hdf.iter_utils import ssts, dts, irbod
 from torch.utils.data import DataLoader, Dataset
 import re
@@ -185,7 +185,8 @@ class FeatureProxy(Dataset):
         X, Y = np.concatenate(self[item_x]), np.concatenate(self[item_y])
 
         if self.level != "frames":
-            return segments_sim(X, splits_x, Y, splits_y, param, mode, n_jobs=n_jobs)
+            locs = segments_sim(X, splits_x, Y, splits_y, param, mode, n_jobs=n_jobs)
+            return [item_y.iloc[loc] for loc in locs]
         else:
             return cos_sim_graph(X, Y, param, mode, n_jobs)
 

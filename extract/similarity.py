@@ -41,7 +41,7 @@ def segments_sim(X, splits_x, Y=None, splits_y=None, param=1, mode="best", n_job
             of the segment splits_x_i-1:splits_x_i
     """
     G = cos_sim_graph(X, Y, param, mode, n_jobs)
-    G = reduce_2d(G, splits_x, splits_y, np.mean, subst_zeros=lambda x: param, n_jobs=n_jobs)
+    G = reduce_2d(G, splits_x, splits_y, np.mean, subst_zeros=None, n_jobs=n_jobs)
     locs = None
     if mode == "best":
         idx = np.argsort(G, axis=1)[:, :param]

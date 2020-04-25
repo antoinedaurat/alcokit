@@ -29,7 +29,7 @@ def cos_sim_graph(X, Y=None, param=1, mode="best", n_jobs=cpu_count()):
 
 def segments_sim(X, splits_x, Y=None, splits_y=None, param=1, mode="best", n_jobs=cpu_count()):
     """
-
+    # TODO : handle sparse-reduce, return distances
     @param X:
     @param splits_x:
     @param Y:

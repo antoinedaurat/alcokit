@@ -135,7 +135,8 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
             # store the metadata for the whole feature
             meta = pd.DataFrame.from_dict(meta, orient="index")
             meta = meta.rename_axis(index=["directory", "name"])
-            meta.reset_index().to_hdf(target_file, feature + "/metadata", "r+")
+            meta.reset_index().to_hdf(target_file, feature + "/meta_m", "r+")
+        # store the metadata for the whole db
         metadata = metadata.reset_index()
         metadata.to_hdf(target_file, "meta", "r+")
     f.close()

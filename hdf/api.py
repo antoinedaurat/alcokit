@@ -2,28 +2,34 @@ import h5py
 import numpy as np
 import pandas as pd
 from multiprocessing import cpu_count
-from cafca.extract.similarity import segments_sim
+from cafca.extract.similarity import segments_sim, cos_sim_graph
 from cafca.hdf.iter_utils import ssts, dts, irbod
-from cafca.extract.utils import reduce_2d
 from torch.utils.data import DataLoader, Dataset
 import re
+
+
+def is_m_frame(name):
+    return re.search(re.compile(r"_m$"), name) is not None
 
 
 class FeatureProxy(Dataset):
     def __init__(self, h5_file, ds_name, parent=None):
         self.h5_file = h5_file
         self.name = ds_name
-        for attr in parent.__dict__:
-            if "_m" in attr:
-                setattr(self, attr, getattr(parent, attr))
-        self.meta = self._get_metadata()
-        self.iter_meta = self.meta
+        if parent is not None:
+            for attr in parent.__dict__:
+                if is_m_frame(attr):
+                    setattr(self, attr, getattr(parent, attr))
+        self.meta_m = self._get_metadata()
+        self.iter_meta = self.meta_m
+        self.level = "meta_m"
         with h5py.File(h5_file, "r") as f:
             ds = f[self.name + "/data"]
             attrs = {k: v for k, v in ds.attrs.items()}
         self.attrs = attrs
-        self.N = self.meta["duration"].sum()
-        self.level = "file"
+        self.N = self.meta_m["duration"].sum()
+        rg = np.arange(self.N)
+        self.frames_m = pd.DataFrame(np.stack((rg, rg + 1)).T, columns=["start", "stop"])
 
     def __len__(self):
         return self.N
@@ -31,29 +37,26 @@ class FeatureProxy(Dataset):
     def __call__(self, level):
         """
         set the time-level of reference from which to get or iterate data and metadata
-        @param level: "files", "segs", or "frames"
+        @param level: string of the name of the m_frame to set as default
         @return: self
         this makes lines such as :
         `for x in db.feature("frames").iterate()`
         quite handy...
         """
-        if level == "files":
-            self.iter_meta = self.meta
-        elif level in "segs":
-            self.iter_meta = self.segs
-        elif level == "frames":
-            rg = np.arange(self.N)
-            self.iter_meta = pd.DataFrame(np.stack((rg, rg + 1)).T, columns=["start", "stop"])
+        meta = getattr(self, level, None)
+        if meta is None:
+            raise ValueError("no m_frame found for level name '%s'" % level)
+        self.iter_meta = meta
         self.level = level
         return self
 
     def _get_metadata(self):
-        return pd.read_hdf(self.h5_file, key=self.name + "/metadata")
+        return pd.read_hdf(self.h5_file, key=self.name + "/meta_m")
 
     def save_metadata(self):
         with h5py.File(self.h5_file, "r+") as f:
             del f[self.name + "/metadata"]
-        self.meta.to_hdf(self.h5_file, key=self.name + "/metadata", mode="r+")
+        self.meta_m.to_hdf(self.h5_file, key=self.name + "/metadata", mode="r+")
         return self._get_metadata()
 
     @staticmethod
@@ -72,12 +75,14 @@ class FeatureProxy(Dataset):
                     "file" or "directory" contains the string (or regex)
             - iterables of type tuple, list, slice and np.ndarray : pass it directly to the h5py.Dataset of the feature
                     i.e. dataset[iterable]
-            - boolean pd.Series are understood as implicitly be meant for the metadata dataframe,
-                    and gen_item returns the data of the rows where the Series is True.
-                    i.e. it returns `dataset[metadata[bool_series]]` and allows to shorten the query
-                    db.feature[db.feature.meta[db.feature.meta["start"] > 100]]
+            - boolean pd.Series are understood as implicitly be meant for the current m_frame
+                    (which is set by calling db.feature("m_frame")
+                    `gen_item` returns the data of the rows where the Series is True.
+                    i.e., once you called `db.feature("meta"), it returns `dataset[meta[bool_series]]`
+                    and allows to shorten the query
+                    `db.feature[db.feature.meta[db.feature.meta["start"] > 100]]`
                     to
-                    db.feature[db.feature.meta["start"] > 100].
+                    `db.feature[db.feature.meta["start"] > 100]`.
             - any pd.DataFrame containing the columns "start" and "stop" will also work and be interpreted as slices.
                     the returned value is then : `(df.iloc[i]["start"]:df.iloc[i]["stop"] for i in range(len(df)))`
         @return: generator yielding the slice of data corresponding to (the elements of) `item`
@@ -108,10 +113,7 @@ class FeatureProxy(Dataset):
                     yield f[self.name + "/data"][item]
         elif isinstance(item, pd.Series):
             if item.dtype == np.bool:
-                if item.index[0] == self.segs.index[0]:  # let's hope this is safe enough and not too much limiting...
-                    items = ssts(self.segs[item])
-                else:
-                    items = ssts(self.iter_meta[item])
+                items = ssts(self.iter_meta[item])
                 with h5py.File(self.h5_file, "r") as f:
                     for item in items:
                         yield f[self.name + "/data"][item]
@@ -183,16 +185,19 @@ class FeatureProxy(Dataset):
         X, Y = np.concatenate(self[item_x]), np.concatenate(self[item_y])
 
         if self.level != "frames":
-            segments_sim(X, splits_x, Y, splits_y, param, mode, n_jobs=n_jobs)
+            return segments_sim(X, splits_x, Y, splits_y, param, mode, n_jobs=n_jobs)
+        else:
+            return cos_sim_graph(X, Y, param, mode, n_jobs)
 
 
 class Database(object):
     def __init__(self, h5_file):
         self.h5_file = h5_file
+        self.info = self._get_metadata()
         with h5py.File(h5_file, "r") as f:
             # add found features as self.feature_name = FeatureProxy(self, feature_name, self.segs)
+            f.visit(self._register_m_frames())
             f.visit(self._register_features())
-        self.meta = self._get_metadata()
 
     def _get_metadata(self):
         return pd.read_hdf(self.h5_file, key="/meta")
@@ -203,16 +208,24 @@ class Database(object):
         self.meta.to_hdf(self.h5_file, key="/meta", mode="r+")
         return self._get_metadata()
 
-    def _register_features(self):
-        file = self.h5_file
+    def save_m_frame(self, frame, key):
+        frame.to_hdf(self.h5_file, key=key, mode="r+")
+        return pd.read_hdf(self.h5_file, key=key)
 
+    def _register_features(self):
         def register(name):
-            if "_m" in name and "/" not in name:
-                setattr(self, name, pd.read_hdf(file, key=name, mode="r"))
-                return None
             if "/data" in name:
                 name = name.strip("data")
-                setattr(self, name.strip("/"), FeatureProxy(self.h5_file, name, self))
+                setattr(self, name.strip("/"), FeatureProxy(self.h5_file, name.strip("/"), self))
+                return None
+            return None
+
+        return register
+
+    def _register_m_frames(self):
+        def register(name):
+            if is_m_frame(name) and name.split("/")[-1] not in self.__dict__:
+                setattr(self, name.split("/")[-1], pd.read_hdf(self.h5_file, key=name, mode="r"))
                 return None
             return None
 

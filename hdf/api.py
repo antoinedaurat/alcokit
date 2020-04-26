@@ -12,24 +12,47 @@ def is_m_frame(name):
     return re.search(re.compile(r"_m$"), name) is not None
 
 
-class FeatureProxy(Dataset):
-    def __init__(self, h5_file, ds_name, parent=None):
+class Axis0Meta(object):
+    """
+    fake m_frame to pass ints, slices etc directly to the .h5 Datasets when setting the reference m_frame to "frames"
+    """
+    def __init__(self, h5_file, ds_name, transposed=True):
         self.h5_file = h5_file
         self.name = ds_name
+        self.T = transposed
+        with h5py.File(h5_file, "r") as f:
+            ds = f[self.name + "/data"]
+            attrs = {k: v for k, v in ds.attrs.items()}
+            self.N = ds.shape[0]
+        self.attrs = attrs
+
+    def __getitem__(self, item):
+        with h5py.File(self.h5_file, "r") as f:
+            rv = f[self.name + "/data"][item]
+        return rv.T if self.T else rv
+
+    def __len__(self):
+        return self.N
+
+
+class FeatureProxy(Dataset):
+    def __init__(self, h5_file, ds_name, parent=None, transposed=True):
+        self.h5_file = h5_file
+        self.name = ds_name
+        self.axis0_m = Axis0Meta(self.h5_file, self.name, transposed)
+        self.meta_m = None
+        self.T = transposed
         if parent is not None:
             for attr in parent.__dict__:
                 if is_m_frame(attr):
                     setattr(self, attr, getattr(parent, attr))
-        self.meta_m = self._get_metadata()
         self.iter_meta = self.meta_m
         self.level = "meta_m"
         with h5py.File(h5_file, "r") as f:
             ds = f[self.name + "/data"]
+            self.N = ds.shape[0]
             attrs = {k: v for k, v in ds.attrs.items()}
-        self.attrs = attrs
-        self.N = self.meta_m["duration"].sum()
-        rg = np.arange(self.N)
-        self.frames_m = pd.DataFrame(np.stack((rg, rg + 1)).T, columns=["start", "stop"])
+            self.attrs = attrs
 
     def __len__(self):
         return self.N
@@ -103,9 +126,10 @@ class FeatureProxy(Dataset):
             else:
                 raise ValueError("no match found in the columns 'directory' and 'name' for '%s'" % item)
         elif type(item) in (tuple, list, slice, np.ndarray):
-            # straight to dataset
+            slices = ssts(self.iter_meta.iloc[item])
             with h5py.File(self.h5_file, "r") as f:
-                yield f[self.name + "/data"][item]
+                for slice_i in slices:
+                    yield f[self.name + "/data"][slice_i]
         elif isinstance(item, pd.DataFrame):
             items = ssts(item)
             with h5py.File(self.h5_file, "r") as f:
@@ -117,8 +141,12 @@ class FeatureProxy(Dataset):
                 with h5py.File(self.h5_file, "r") as f:
                     for item in items:
                         yield f[self.name + "/data"][item]
+            elif "start" in item.index and "stop" in item.index:  # SINGLE DF ROW
+                with h5py.File(self.h5_file, "r") as f:
+                    yield f[self.name + "/data"][item.start:item.stop]
             else:  # TODO : this could be the .index of self.meta or self.segs !
-                raise ValueError("pd.Series passed to `gen_item` should be of dtype=np.bool")
+                raise ValueError("pd.Series passed to `gen_item` should be of dtype=np.bool"
+                                 " or have 'start' and 'stop' in its index")
         else:
             raise ValueError("type of item passed to `gen_item` not recognised: {}".format(type(item)))
 
@@ -128,8 +156,12 @@ class FeatureProxy(Dataset):
         @param item:
         @return:
         """
-        rv = [res for res in self.gen_item(item)]
-        if len(rv) <= 1:
+        if self.T:
+            rv = [res.T for res in self.gen_item(item)]
+        else:
+            rv = [res for res in self.gen_item(item)]
+        if len(rv) <= 1 and isinstance(item, int):
+            # strip the list for DataLoader and co
             return rv[0]
         return rv
 
@@ -195,6 +227,7 @@ class Database(object):
     def __init__(self, h5_file):
         self.h5_file = h5_file
         self.info = self._get_metadata()
+        self.meta_m = None
         with h5py.File(h5_file, "r") as f:
             # add found features as self.feature_name = FeatureProxy(self, feature_name, self.segs)
             f.visit(self._register_m_frames())
@@ -206,7 +239,7 @@ class Database(object):
     def save_metadata(self):
         with h5py.File(self.h5_file, "r+") as f:
             del f["/meta"]
-        self.meta.to_hdf(self.h5_file, key="/meta", mode="r+")
+        self.meta_m.to_hdf(self.h5_file, key="/meta", mode="r+")
         return self._get_metadata()
 
     def save_m_frame(self, frame, key):
@@ -225,7 +258,7 @@ class Database(object):
 
     def _register_m_frames(self):
         def register(name):
-            if is_m_frame(name) and name.split("/")[-1] not in self.__dict__:
+            if is_m_frame(name) and getattr(self, name.split("/")[-1], None) is None:
                 setattr(self, name.split("/")[-1], pd.read_hdf(self.h5_file, key=name, mode="r"))
                 return None
             return None

@@ -1,8 +1,9 @@
 import h5py
 import numpy as np
+import scipy.sparse as sp
 import pandas as pd
 from multiprocessing import cpu_count
-from cafca.extract.similarity import cos_sim_graph, segments_sim
+from cafca.extract.similarity import segments_sim, sort_graph
 from cafca.hdf.iter_utils import ssts, dts, irbod
 from torch.utils.data import DataLoader, Dataset
 import re
@@ -16,6 +17,7 @@ class Axis0Meta(object):
     """
     fake m_frame to pass ints, slices etc directly to the .h5 Datasets when setting the reference m_frame to "frames"
     """
+
     def __init__(self, h5_file, ds_name, transposed=True):
         self.h5_file = h5_file
         self.name = ds_name
@@ -51,8 +53,16 @@ class FeatureProxy(Dataset):
         with h5py.File(h5_file, "r") as f:
             ds = f[self.name + "/data"]
             self.N = ds.shape[0]
-            attrs = {k: v for k, v in ds.attrs.items()}
-            self.attrs = attrs
+            self.attrs = {k: v for k, v in ds.attrs.items()}
+            self.has_graph = "graph" in f[self.name].keys()
+
+    @property
+    def graph(self):
+        if self.has_graph:
+            with h5py.File(self.h5_file, "r") as f:
+                G = f[self.name + "/graph"][()]
+            return G
+        return None
 
     def __len__(self):
         return self.N
@@ -200,47 +210,63 @@ class FeatureProxy(Dataset):
         return np.concatenate(self[item]), dts(item)
 
     def neighbors(self, item_x, item_y=None, param=1, mode="best",
-                  n_jobs=cpu_count()):
-        """
+                  metric="cosine", reduce_func=np.mean,
+                  batch_size=500,
+                  n_cores=cpu_count(), return_graph=False):
 
-        @param item_x:
-        @param item_y:
-        @param param:
-        @param mode:
-        @param n_jobs:
-        @return: metadata
-        """
         if item_y is None:
             item_y = item_x
 
-        splits_x, splits_y = dts(item_x), dts(item_y)
-        X, Y = np.concatenate(self[item_x]), np.concatenate(self[item_y])
+        def check_args(item_):
+            if isinstance(item_, tuple) and isinstance(item_[0], FeatureProxy) and isinstance(item_[1], pd.DataFrame):
+                feat, item = item_
+            elif isinstance(item_, pd.DataFrame):
+                feat, item = self, item_
+            else:
+                raise ValueError
+            return feat, item
 
-        if self.level != "frames":
-            locs = segments_sim(X, splits_x, Y, splits_y, param, mode, n_jobs=n_jobs)
-            return [item_y.iloc[loc] for loc in locs]
+        feat_x, item_x = check_args(item_x)
+        feat_y, item_y = check_args(item_y)
+
+        if self.has_graph and metric == "cosine":
+            G = self.graph[item_x.index.values]
+            G = G[:, item_y.index.values]
+            locs = sort_graph(G, mode, param)
+            rv = (locs, G) if return_graph else locs
         else:
-            return cos_sim_graph(X, Y, param, mode, n_jobs)
+            rv = segments_sim(feat_x, item_x, feat_y, item_y,
+                              param, mode, metric, reduce_func,
+                              batch_size, return_graph, n_cores)
+        if return_graph:
+            locs, graph = rv
+            return [item_y.iloc[loc] for loc in locs], graph
+        locs = rv
+        return [item_y.iloc[loc] for loc in locs]
 
 
 class Database(object):
     def __init__(self, h5_file):
         self.h5_file = h5_file
-        self.info = self._get_metadata()
+        self.info = self._get_metadata("/info")
         self.meta_m = None
         with h5py.File(h5_file, "r") as f:
             # add found features as self.feature_name = FeatureProxy(self, feature_name, self.segs)
             f.visit(self._register_m_frames())
             f.visit(self._register_features())
 
-    def _get_metadata(self):
-        return pd.read_hdf(self.h5_file, key="/meta")
+    def visit(self, func=print):
+        with h5py.File(self.h5_file, "r") as f:
+            f.visititems(func)
 
-    def save_metadata(self):
+    def _get_metadata(self, key):
+        return pd.read_hdf(self.h5_file, key=key)
+
+    def save_metadata(self, key, meta):
         with h5py.File(self.h5_file, "r+") as f:
-            del f["/meta"]
-        self.meta_m.to_hdf(self.h5_file, key="/meta", mode="r+")
-        return self._get_metadata()
+            f.pop(key)
+        meta.to_hdf(self.h5_file, key=key, mode="r+")
+        return self._get_metadata(key)
 
     def save_m_frame(self, frame, key):
         frame.to_hdf(self.h5_file, key=key, mode="r+")

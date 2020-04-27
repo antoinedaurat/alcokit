@@ -40,14 +40,16 @@ def segment_from_recurrence_matrix(X,
         plt.plot(dg)
     mx = localmax(dg * (dg > thresh)).nonzero()[0]
     # filter out maxes less than min_dur frames away of the previous max
-    mx = mx * (np.diff(mx, prepend=0) >= min_dur)
+    mx = mx * (np.diff(mx, append=R.shape[0]) >= min_dur)
     mx = mx[mx > 0]
     # print(mx)
     slices = np.split(np.arange(R.shape[0]), mx)
+    # assert slices[-1][-1] == R.shape[0] - 1, ("1", slices[-1][-1], R.shape[0])
     # last slice MAY be just the final index
     if len(slices[-1]) == 1:
         slices[-2] = np.concatenate(slices[-2:])
         slices = slices[:-1]
+    # assert slices[-1][-1] == R.shape[0] - 1, ("2", slices[-1][-1], R.shape[0])
     return mx, R, dg, slices
 
 

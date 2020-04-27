@@ -92,7 +92,16 @@ def _collect_slices_metadatas_from(files, keywords):
 
 
 def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
+    """
+    !!! assumes that all features have the same axis 0 !!!
+    @param target_file:
+    @param metadata:
+    @param mode:
+    @param kwargs:
+    @return:
+    """
     features = set([col for col in metadata.T.index.get_level_values(0)])
+    with_meta_m = True  # gate to compute and store meta_m only with the first feature
     with h5py.File(target_file, mode) as f:
         for feature in features:
             dtype = metadata[feature, "dtype"].unique().item()
@@ -125,7 +134,8 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
                 f.flush()
                 # store the metadata of this file
                 file = split_path(file)
-                meta[(file[0], file[1].strip(".h5"))] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
+                if with_meta_m:
+                    meta[(file[0], file[1].strip(".h5"))] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
             # add attrs to the DS
             for key, value in attrs:
                 feature_ds.attrs[key] = value
@@ -133,12 +143,14 @@ def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
             feature_ds.attrs["axis0_nbytes"] = feature_ds[0].nbytes
             f.flush()
             # store the metadata for the whole feature
-            meta = pd.DataFrame.from_dict(meta, orient="index")
-            meta = meta.rename_axis(index=["directory", "name"])
-            meta.reset_index().to_hdf(target_file, feature + "/meta_m", "r+")
+            if with_meta_m:
+                meta = pd.DataFrame.from_dict(meta, orient="index")
+                meta = meta.rename_axis(index=["directory", "name"])
+                meta.reset_index().to_hdf(target_file, "meta_m", "r+")
+                with_meta_m = False
         # store the metadata for the whole db
         metadata = metadata.reset_index()
-        metadata.to_hdf(target_file, "meta", "r+")
+        metadata.to_hdf(target_file, "info", "r+")
     f.close()
     return None
 

@@ -1,47 +1,27 @@
-import sklearn.neighbors as knn
 from multiprocessing import cpu_count
-from cafca.extract.utils import reduce_2d
 import numpy as np
+from sklearn.metrics import pairwise_distances
+from cafca.hdf.iter_utils import dts
+from cafca.extract.utils import mp_foreach
 
 
-def _get_estimator(param=1, mode="best", n_jobs=cpu_count()):
-    if mode == "best":
-        param = int(param)
-        return knn.KNeighborsTransformer(metric="cosine",
-                                         n_neighbors=param,
-                                         n_jobs=n_jobs)
-    elif mode == "radius":
-        return knn.RadiusNeighborsTransformer(metric="cosine",
-                                              radius=param,
-                                              n_jobs=n_jobs)
-    else:
-        raise ValueError("value for `mode` argument = '{}' not understood.".format(mode) +
-                         "`mode` should be one of 'best' or 'radius'")
+def sim_graph(x_tuple, y_tuple, metric, reduce_func=None):
+    dbx, dby = x_tuple[0], y_tuple[0]
+    item_x, item_y = x_tuple[1], y_tuple[1]
+    slice_x, slice_y = dts(item_x), dts(item_y)
+    data_x, data_y = np.concatenate(dbx[item_x], axis=int(dbx.T)), np.concatenate(dby[item_y], axis=int(dby.T))
+    data_x = data_x.T if dbx.T else data_x
+    data_y = data_y.T if dby.T else data_y
+    G = pairwise_distances(data_x, data_y, metric=metric)
+    if reduce_func is not None:
+        G = np.stack([reduce_func(block, axis=0)
+                      for block in np.split(G, slice_x)[:-1]])
+        G = np.hstack([reduce_func(block, axis=1)[:, None]
+                       for block in np.split(G, slice_y, axis=1)[:-1]])
+    return G
 
 
-def cos_sim_graph(X, Y=None, param=1, mode="best", n_jobs=cpu_count()):
-    if Y is None:
-        Y = X
-    nn = _get_estimator(param, mode, n_jobs)
-    nn.fit(Y)
-    return nn.transform(X)
-
-
-def segments_sim(X, splits_x, Y=None, splits_y=None, param=1, mode="best", n_jobs=cpu_count()):
-    """
-    # TODO : handle sparse-reduce, return distances
-    @param X:
-    @param splits_x:
-    @param Y:
-    @param splits_y:
-    @param param:
-    @param mode:
-    @param n_jobs:
-    @return: a list of arrays where each array_i corresponds to the neighbors (indices in the array splits_y)
-            of the segment splits_x_i-1:splits_x_i
-    """
-    G = cos_sim_graph(X, Y, param, mode, n_jobs)
-    G = reduce_2d(G, splits_x, splits_y, np.mean, subst_zeros=None, n_jobs=n_jobs)
+def sort_graph(G, mode, param):
     locs = None
     if mode == "best":
         idx = np.argsort(G, axis=1)[:, :param]
@@ -55,9 +35,32 @@ def segments_sim(X, splits_x, Y=None, splits_y=None, param=1, mode="best", n_job
     return locs
 
 
-def cos_sim_neighbors(X, Y=None, param=1, mode="best", n_jobs=cpu_count(), return_distances=True):
-    if Y is None:
-        Y = X
-    nn = _get_estimator(param, mode, n_jobs)
-    nn.fit(Y)
-    return nn.kneighbors(X, return_distances)
+def segments_sim(feat_x, item_x, feat_y, item_y,
+                 param=1, mode="best", metric="cosine",
+                 reduce_func=np.mean, batch_size=500,
+                 return_graph=False, n_cores=cpu_count()):
+    N, M = len(item_x), len(item_y)
+
+    def as_batch(rg, n):
+        i = 0
+        while i < len(rg):
+            yield rg[i:i + n]
+            i += n
+
+    # Todo : make the following to a queue + consumer structure so as to pack the args in a generator!
+    # Todo 2 : make the batch size dependent of memory ?
+    args = [((feat_x, item_x.iloc[batch_x]), (feat_y, item_y.iloc[batch_y]), metric, reduce_func)
+            for batch_x in as_batch(list(range(N)), batch_size)
+            for batch_y in as_batch(list(range(M)), batch_size)]
+
+    G = mp_foreach(sim_graph, args, n_cores)
+    # if N % batch_size > 0, then we have to concatenate 2 groups of results
+    axes0 = np.r_[tuple(x.shape[0] for x in G)]
+    split = np.where(axes0[:-1] != axes0[1:])[0][0]
+    # g2 = the last batches of x
+    g1, g2 = G[:split + 1], G[split + 1:]
+    G = np.vstack((np.hstack(g1).reshape(-1, M),
+                   np.hstack(g2).reshape((-1, M))))
+    G = np.ascontiguousarray(G)
+    locs = sort_graph(G, mode, param)
+    return (locs, G) if return_graph else locs

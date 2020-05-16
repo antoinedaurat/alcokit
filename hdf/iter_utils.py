@@ -22,6 +22,18 @@ def ssts(item):
     return slices
 
 
+def batch_of(feature, m_frame, batch_size, shuffle=True):
+    n = len(m_frame)
+    n_batches = n // batch_size
+    gen = feature.gen_item(m_frame if not shuffle else m_frame.sample(frac=1.))
+    next_batch = [next(gen) for _ in range(batch_size)]
+    for i in range(n_batches-1):
+        yield next_batch
+        next_batch = [next(gen) for _ in range(batch_size)]
+    yield next_batch
+    yield [next(gen) for _ in range(n % batch_size)]
+
+
 def irbol(item, batch_size=64, shuffle=False, drop_last=False):
     """
     In Random Batches Of Length

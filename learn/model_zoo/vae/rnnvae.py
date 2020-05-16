@@ -1,5 +1,5 @@
-from cafca.models import device
-from cafca.models.parts import ParamedSampler
+from cafca.learn import DEVICE
+from cafca.learn.modules import ParamedSampler
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence
@@ -23,9 +23,9 @@ class EncoderRNN(nn.Module):
         indices = torch.LongTensor(np.array(lengths) - 1) \
             .view(-1, 1) \
             .expand(unpacked.size(0), unpacked.size(2)) \
-            .unsqueeze(1).to(device)
+            .unsqueeze(1).to(DEVICE)
         last_states = unpacked.gather(dim=1, index=indices).squeeze(dim=1)[:, :self.h]
-        zeros = torch.zeros(unpacked.size(0), 1, unpacked.size(2)).long().to(device)
+        zeros = torch.zeros(unpacked.size(0), 1, unpacked.size(2)).long().to(DEVICE)
         first_states = unpacked.gather(dim=1, index=zeros).squeeze(dim=1)[:, self.h:]
         return torch.cat((first_states, last_states), dim=-1), lengths
 
@@ -55,9 +55,9 @@ class DecoderRNN(nn.Module):
 class RNNVAE(nn.Module):
     def __init__(self):
         super(RNNVAE, self).__init__()
-        self.enc = EncoderRNN().to(device)
-        self.dec = DecoderRNN().to(device)
-        self.sampler = ParamedSampler(Z, Z).to(device)
+        self.enc = EncoderRNN().to(DEVICE)
+        self.dec = DecoderRNN().to(DEVICE)
+        self.sampler = ParamedSampler(Z, Z).to(DEVICE)
 
     def forward(self, data):
         coded, lengths = self.enc(data)

@@ -3,6 +3,11 @@ import torch.nn as nn
 import torch.distributions as D
 
 
+class Pass(nn.Module):
+    def forward(self, x):
+        return x
+
+
 class Flatten(nn.Module):
     def forward(self, input: torch.Tensor):
         return input.view(input.size(0), -1)
@@ -15,6 +20,11 @@ class UnFlatten(nn.Module):
 
     def forward(self, input: torch.Tensor):
         return input.view(input.size(0), *self.output_shape)
+
+
+class Abs(nn.Module):
+    def forward(self, x):
+        return torch.abs(x)
 
 
 class FcUnit(nn.Module):

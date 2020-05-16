@@ -37,9 +37,9 @@ class VariationalAutoEncoder(AutoEncoder):
 
     def get_loss(self, x_true):
         x_pred, mu, logvar = self.forward(x_true)
-        RE = self.reconstruction_loss(x_pred, x_true, reduction="sum")
-        KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-        return RE + KLD
+        RE = self.reconstruction_loss(x_pred, x_true)
+        # KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+        return RE
 
     def encode(self, x):
         with torch.no_grad():
@@ -64,5 +64,3 @@ class VariationalAutoEncoder(AutoEncoder):
         for n, txt in enumerate(tags):
             plt.text(encoded[n, 0], encoded[n, 1], txt)
         plt.show()
-
-

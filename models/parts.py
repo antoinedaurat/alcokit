@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.distributions as D
 
 
 class Flatten(nn.Module):
@@ -36,7 +37,7 @@ class FcStack(nn.Module):
         super(FcStack, self).__init__()
         sizes = zip(sizes[:-1], sizes[1:])
         self.module = nn.Sequential(*[FcUnit(n_in, n_out, batch_norm, activation, dropout)
-                                    for n_in, n_out in sizes])
+                                      for n_in, n_out in sizes])
 
     def forward(self, x):
         return self.module(x)
@@ -111,6 +112,7 @@ class ParamedSampler(nn.Module):
     """
     Parametrized Sampler for Variational Auto-Encoders
     """
+
     def __init__(self, input_dim: int, z_dim: int, pre_activation=nn.Tanh):
         super(ParamedSampler, self).__init__()
         self.fc1 = nn.Linear(input_dim, z_dim)
@@ -127,3 +129,60 @@ class ParamedSampler(nn.Module):
 
     def get_device(self):
         return next(self.parameters()).device.type
+
+
+class MultivariateImaginaryInput(D.MultivariateNormal):
+    def __init__(self, n):
+        self.mu = nn.Parameter(torch.rand(n), requires_grad=True)
+        sigma = torch.rand(n, n)
+        with torch.no_grad():
+            sigma *= sigma.T
+            sigma += n * torch.eye(n)
+        self.sigma = nn.Parameter(sigma, requires_grad=True)
+        super(MultivariateImaginaryInput, self).__init__(self.mu, self.sigma)
+
+    def parameters(self):
+        return iter([self.mu, self.sigma])
+
+
+class ImaginaryInputMixture(nn.Module):
+    def __init__(self, s, n):
+        super(ImaginaryInputMixture, self).__init__()
+        self.s, self.event_shape = s, n if isinstance(n, tuple) else (n,)
+        self.alpha = nn.Parameter(torch.rand(s), requires_grad=True)
+        self.planes = {i: MultivariateImaginaryInput(n) for i in range(s)}
+
+    def forward(self, shape):
+        # change to torch.mm for efficiency...
+        output = torch.zeros(*shape, *self.event_shape)
+        for s in range(self.s):
+            output += self.alpha[s] * self.planes[s].rsample(shape)
+        return output
+
+    def rsample(self, shape):
+        return self.forward(shape)
+
+    def parameters(self):
+        for imin in self.planes.values():
+            for param in imin.parameters():
+                yield param
+        yield self.alpha
+
+
+class ImaginaryPopulation(nn.Module):
+    def __init__(self, k, input_class, **kwargs):
+        super(ImaginaryPopulation, self).__init__()
+        self.k = k
+        self.planes = {i: input_class(**kwargs) for i in range(k)}
+
+    def forward(self, k):
+        output = torch.zeros(*k.size(), *self.planes[0].event_shape)
+        for i, imin in self.planes.items():
+            where = k == i
+            output[where] = imin.rsample((where.sum(),))
+        return output
+
+    def parameters(self):
+        for imin in self.planes.values():
+            for param in imin.parameters():
+                yield param

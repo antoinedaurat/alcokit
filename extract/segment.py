@@ -162,7 +162,8 @@ class SegmentList(list):
             super(SegmentList, self).__init__(Segment(sample[:, slice], i) for i, slice in enumerate(slices))
             # print("found", len(self), "segments")
         else:
-            super(SegmentList, self).__init__(sample)
+            super(SegmentList, self).__init__([x if isinstance(x, Segment) else Segment(FFT(x), i)
+                                               for i, x in enumerate(sample)])
 
     @property
     def slices(self):

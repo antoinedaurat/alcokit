@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchsummary import summary
+from tqdm import tqdm_notebook
 
 
 class ModuleBase(nn.Module):
@@ -48,15 +49,17 @@ class ModelBase(ModuleBase):
         self.train()
         train_loss = []
         start = time.time()
+        epoch = None
         for i, x in enumerate(train_iterator):
             self.optimizer.zero_grad()
             loss = self.get_loss(x)
             loss.backward()
             train_loss += [loss.item()]
             self.optimizer.step()
+            epoch = i
         if test_iterator is None:
             duration = time.time() - start
-            return train_loss, [0.], (duration, duration / (i+1))
+            return train_loss, [0.], (duration, duration / (epoch+1))
         self.eval()
         test_loss = []
         with torch.no_grad():
@@ -64,7 +67,7 @@ class ModelBase(ModuleBase):
                 loss = self.get_loss(x)
                 test_loss += [loss.item()]
         duration = time.time() - start
-        return train_loss, test_loss, (duration, duration / (i+1))
+        return train_loss, test_loss, (duration, duration / (epoch+1))
 
     def as_input(self, x):
         if isinstance(x, np.ndarray):
@@ -74,8 +77,7 @@ class ModelBase(ModuleBase):
                 return x.float()
             else:
                 return x.float().to(self.device)
-        else:
-            return x
+        return x
 
     @staticmethod
     def as_output(y):
@@ -88,8 +90,7 @@ class ModelBase(ModuleBase):
 
     def fit(self, X, X_cv, batch_size, n_epochs, optimizer, checkpoints_dir=None, n_checkpoints=0):
         # move the input to the right device and type and make iterators
-        # train_iterator = DataLoader(self.as_input(X), batch_size=batch_size, shuffle=True)
-        train_iterator = X
+        train_iterator = DataLoader(self.as_input(X), batch_size=batch_size,  shuffle=True)
         if X_cv is not None:
             test_iterator = DataLoader(self.as_input(X_cv), batch_size=batch_size)
         else:
@@ -104,10 +105,10 @@ class ModelBase(ModuleBase):
         print("Starting training")
         for e in range(n_epochs):
             tr_loss, ts_loss, (dur, avg_dur) = self.one_epoch(train_iterator, test_iterator)
-            train_loss += tr_loss
-            test_loss += ts_loss
             tr_loss = sum(tr_loss) / len(tr_loss)
             ts_loss = sum(ts_loss) / len(ts_loss)
+            train_loss += [tr_loss]
+            test_loss += [ts_loss]
             print(f'Epoch {e+1} took {dur:.3f}sec [{1000*(avg_dur/batch_size):.3f}ms/sample]. Train Loss: {tr_loss:.3f}, Test Loss: {ts_loss:.3f}')
             if check_freq and e > 0 and ((e % check_freq) == 0 or (e == n_epochs-1)):
                 path = get_path(e+1)

@@ -49,17 +49,21 @@ def csplit_left(X, splits, **kwargs):
     return np.r_[new[:-1], splits[1:]]
 
 
-def k_csplits(X, k, **kwargs):
+def k_csplits(X, k, side="right", **kwargs):
     splits = categorical_split(X, **kwargs)
-    for n in range(max([0, k - 2])):
-        splits = csplit_right(X, splits, **kwargs)
+    if side == "right":
+        for n in range(max([0, k - 2])):
+            splits = csplit_right(X, splits, **kwargs)
+    else:
+        for n in range(max([0, k - 2])):
+            splits = csplit_left(X, splits, **kwargs)
     return splits
 
 
-def csplit_along_axis(X, k, axis=None, **kwargs):
+def csplit_along_axis(X, k, side="right", axis=None, **kwargs):
     if axis is None:
-        return k_csplits(X.flat[:], k, **kwargs)
-    return np.apply_along_axis(k_csplits, int(not axis), X, k, **kwargs)
+        return k_csplits(X.flat[:], k, side, **kwargs)
+    return np.apply_along_axis(k_csplits, int(not axis), X, k, side, **kwargs)
 
 
 def tag(X, csplits):
@@ -71,6 +75,16 @@ def tag(X, csplits):
         func = lambda s: X >= (s if matching_dim == 1 else s[:, None])
         return np.sum(np.stack(tuple(func(s) for s in (csplits if matching_dim == 1 else csplits.T))),
                       axis=0, out=tags) - 1
+
+
+class SupportTagger(object):
+    def __init__(self, data, k=2, ignore_zeros=True, side="right"):
+        self.ignore_zeros = ignore_zeros
+        self.side = side
+        self.splits = k_csplits(data.flat[:], k, side, ignore_zeros=ignore_zeros)
+
+    def tag(self, X):
+        return tag(X, self.splits)
 
 
 def smooth_tags(tags, axis=None, kernel=None, window=2, agg=np.mean):

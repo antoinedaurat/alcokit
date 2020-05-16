@@ -1,5 +1,5 @@
 import numpy as np
-from multiprocessing import cpu_count, Pool
+from multiprocessing import cpu_count, Pool, get_context
 from scipy.sparse import issparse
 
 
@@ -19,6 +19,6 @@ def reduce_2d(arr_2d, splits_i, splits_j, reduce_func=np.mean, subst_zeros=None,
 
 
 def mp_foreach(func, args, n_cores=cpu_count()):
-    with Pool(n_cores) as p:
+    with get_context("spawn").Pool(n_cores) as p:
         res = p.starmap(func, args)
     return res

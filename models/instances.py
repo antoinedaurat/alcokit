@@ -1,5 +1,3 @@
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
@@ -16,13 +14,13 @@ class FcVAE(VariationalAutoEncoder):
         sizes = [input_dim, *sizes[:-1]]
 
         encoder = nn.Sequential(
-            Flatten(),
+            # Flatten(),
             FcStack(sizes, batch_norm, activation, dropout),
             ParamedSampler(sizes[-1], z_dim, pre_sampler_act)
         )
         decoder = nn.Sequential(
             FcStack([z_dim, *sizes[::-1]], batch_norm, activation, dropout),
-            UnFlatten(input_shape[1:])
+            # UnFlatten(input_shape[1:])
         )
         super(FcVAE, self).__init__((1, input_dim), encoder, decoder, reconstruction_loss)
 

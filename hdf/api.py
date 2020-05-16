@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-import scipy.sparse as sp
 import pandas as pd
 from multiprocessing import cpu_count
 from cafca.extract.similarity import segments_sim, sort_graph

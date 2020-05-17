@@ -35,8 +35,8 @@ def default_batch_step(model, loss_fn, optimizer, batch):
     return loss.item()
 
 
-def is_decreasing(e, tr_losses, ts_losses, n_lasts=26, thresh=1e-1):
-    if len(tr_losses) >= 5 and all(np.isnan(x) for x in tr_losses[-5:]):
+def is_decreasing(e, tr_losses, ts_losses, n_lasts=50, thresh=1e-1):
+    if len(tr_losses) >= 10 and all(np.isnan(x) for x in tr_losses[-10:]):
         return False
     if e < n_lasts:
         return True
@@ -112,6 +112,7 @@ class TrainingLoop(object):
             if e > 0 and self.validate is not None:
                 if not self.validate(e, self.tr_loss, self.ts_loss):
                     print("Epoch {}: Loss not decreasing enough! BREAK!".format(e))
+                    print(self.tr_loss[-10:])
                     self.epoch_callback(n_epochs)
                     break
 

@@ -17,7 +17,7 @@ def cos_loss(x, y):
 
 
 def euclidean_loss(x, y):
-    out = torch.sqrt(((x - y) ** 2).mean(axis=0))
+    out = torch.sqrt(((x - y) ** 2).sum(axis=0))
     return out.sum()
 
 

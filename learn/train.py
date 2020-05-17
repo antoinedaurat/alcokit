@@ -34,14 +34,16 @@ def default_batch_step(model, loss_fn, optimizer, batch):
     return loss.item()
 
 
-def is_not_decreasing(e, tr_losses, ts_losses, n_lasts=100, thresh=1e-1):
+def is_decreasing(e, tr_losses, ts_losses, n_lasts=26, thresh=1e-1):
     if e < n_lasts:
+        return True
+    if all(torch.isnan(x) for x in tr_losses[-5:]):
         return False
     n = min(n_lasts // 2, len(tr_losses) // 2)
     before = tr_losses[-n*2:-n]
     now = tr_losses[-n:]
     diff = (sum(before) / len(before)) - (sum(now) / len(now))
-    return diff <= thresh
+    return diff >= thresh
 
 
 class LossObserver(ReduceLROnPlateau):
@@ -78,13 +80,13 @@ class TrainingLoop(object):
                  batch_step,
                  test=None,
                  cv_step=None,
-                 break_test=None,
+                 validate=None,
                  epoch_callback=None,
                  ):
         self.batch_step = batch_step
         self.test = test
         self.cv_step = cv_step
-        self.break_test = break_test
+        self.validate = validate
         self.epoch_callback = epoch_callback
         self.tr_loss = []
         self.ts_loss = []
@@ -106,8 +108,8 @@ class TrainingLoop(object):
 
             self.log(e,  time()-start, self.tr_loss[-1])
 
-            if e > 0 and self.break_test is not None:
-                if self.break_test(e, self.tr_loss, self.ts_loss):
+            if e > 0 and self.validate is not None:
+                if not self.validate(e, self.tr_loss, self.ts_loss):
                     print("Epoch {}: Loss not decreasing enough! BREAK!".format(e))
                     self.epoch_callback(n_epochs)
                     break

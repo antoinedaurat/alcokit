@@ -35,7 +35,7 @@ def default_batch_step(model, loss_fn, optimizer, batch):
     return loss.item()
 
 
-def is_decreasing(e, tr_losses, ts_losses, n_lasts=50, thresh=1e-1):
+def is_decreasing(e, tr_losses, ts_losses, n_lasts=100, thresh=1e-1):
     if len(tr_losses) >= 10 and all(np.isnan(x) for x in tr_losses[-10:]):
         return False
     if e < n_lasts:

@@ -9,6 +9,7 @@ else:
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
 import torch
+import numpy as np
 
 
 class DefaultHP(dict):
@@ -35,10 +36,10 @@ def default_batch_step(model, loss_fn, optimizer, batch):
 
 
 def is_decreasing(e, tr_losses, ts_losses, n_lasts=26, thresh=1e-1):
+    if len(tr_losses) >= 5 and all(np.isnan(x) for x in tr_losses[-5:]):
+        return False
     if e < n_lasts:
         return True
-    if all(torch.isnan(x) for x in tr_losses[-5:]):
-        return False
     n = min(n_lasts // 2, len(tr_losses) // 2)
     before = tr_losses[-n*2:-n]
     now = tr_losses[-n:]

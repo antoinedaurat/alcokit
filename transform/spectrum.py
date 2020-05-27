@@ -67,7 +67,7 @@ def denoise(S):
 
 def convolve(S, kernel):
     pass
-
+np.cov
 
 def exponentiate(S, thresh=.1, strength=20):
     y = S - thresh

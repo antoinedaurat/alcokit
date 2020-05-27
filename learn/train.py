@@ -25,12 +25,14 @@ class DefaultHP(dict):
         self.update(kwargs)
 
 
-def default_batch_step(model, loss_fn, optimizer, batch):
+def default_batch_step(model, loss_fn, optimizer, batch, grad_norm=0):
     model.train()
     optimizer.zero_grad()
     predictions = model(batch)
     loss = loss_fn(batch, predictions)
     loss.backward()
+    if grad_norm > 0:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_norm)
     optimizer.step()
     return loss.item()
 
@@ -93,8 +95,8 @@ class TrainingLoop(object):
         self.ts_loss = []
 
     def log(self, e, dur, L):
-        pass
         # print("Epoch {} : duration = {:.2f} sec. -- loss = {:.5f}".format(e, dur, L))
+        pass
 
     def run(self, train, n_epochs):
         total_dur = time()

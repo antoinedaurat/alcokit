@@ -9,7 +9,7 @@ from cafca import HOP_LENGTH, SR, N_FFT
 
 # OS
 def is_audio_file(file):
-    return file.split(".")[-1] in ("wav", "aif", "aiff", "mp3", "m4a") and "._" not in file
+    return file.split(".")[-1] in ("wav", "aif", "aiff", "mp3", "m4a", "mp4") and "._" not in file
 
 
 def flat_dir(directory):

@@ -2,7 +2,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from cafca.learn.modules import *
-from cafca.learn.model_zoo.vae import VariationalAutoEncoder
+from cafca.learn.model_zoo.vae.vae import VariationalAutoEncoder
 
 
 class FcVAE(VariationalAutoEncoder):

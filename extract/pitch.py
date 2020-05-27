@@ -20,8 +20,8 @@ def spectra(S, midi_pitches,
     @return:
     """
     frequencies = np.linspace(0, 22050 / 2, S.shape[0])
-    mid_col = m2hz(midi_pitches + tuning) * h_dist
-    ratios = frequencies / mid_col[:, None]
+    mid_col = m2hz(midi_pitches + tuning)
+    ratios = (frequencies / mid_col[:, None]) ** (1/h_dist)
     half_col = .5 * mid_col[:, None]
     d = (((half_col + np.maximum(frequencies, half_col)) % mid_col[:, None]) - half_col)
     # normalize each peak by forcing regions near 0 to be even closer to 0

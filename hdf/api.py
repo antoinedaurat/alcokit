@@ -263,7 +263,8 @@ class Database(object):
 
     def save_metadata(self, key, meta):
         with h5py.File(self.h5_file, "r+") as f:
-            f.pop(key)
+            if key in f:
+                f.pop(key)
         meta.to_hdf(self.h5_file, key=key, mode="r+")
         return self._get_metadata(key)
 

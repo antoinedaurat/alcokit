@@ -12,6 +12,7 @@ class Model(object):
                  module,
                  loss_fn,
                  optimizer,
+                 period=1024,
                  db_path=None):
         self.hp = hp
         self.module = module
@@ -21,7 +22,8 @@ class Model(object):
         self.loop = TrainingLoop(self.batch_step,
                                  None, None,
                                  None,
-                                 self.save_checkpoint)
+                                 period=period,
+                                 period_callback=self.save_checkpoint)
 
         self.db_path = db_path
         if db_path is not None:

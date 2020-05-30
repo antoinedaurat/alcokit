@@ -84,19 +84,22 @@ class TrainingLoop(object):
                  test=None,
                  cv_step=None,
                  validate=None,
-                 epoch_callback=None,
+                 period=1024,
+                 period_callback=None,
+                 log_epoch=True,
                  ):
         self.batch_step = batch_step
         self.test = test
         self.cv_step = cv_step
         self.validate = validate
-        self.epoch_callback = epoch_callback
+        self.period = period
+        self.period_callback = period_callback
         self.tr_loss = []
         self.ts_loss = []
+        self.log_epoch = log_epoch
 
     def log(self, e, dur, L):
-        # print("Epoch {} : duration = {:.2f} sec. -- loss = {:.5f}".format(e, dur, L))
-        pass
+        print("Epoch {} : duration = {:.2f} sec. -- loss = {:.5f}".format(e, dur, L))
 
     def run(self, train, n_epochs):
         total_dur = time()
@@ -109,17 +112,18 @@ class TrainingLoop(object):
                 loss = [self.cv_step(batch) for batch in self.test]
                 self.ts_loss += [sum(loss) / len(loss)]
 
-            self.log(e,  time()-start, self.tr_loss[-1])
+            if self.log_epoch:
+                self.log(e,  time()-start, self.tr_loss[-1])
 
             if e > 0 and self.validate is not None:
                 if not self.validate(e, self.tr_loss, self.ts_loss):
                     print("Epoch {}: Loss not decreasing enough! BREAK!".format(e))
                     print(self.tr_loss[-10:])
-                    self.epoch_callback(n_epochs)
+                    self.period_callback(n_epochs)
                     break
 
-            if self.epoch_callback is not None:
-                self.epoch_callback(e)
+            if self.period_callback is not None and e > 0 and e % self.period == 0:
+                self.period_callback(e)
 
         print()
         total_dur = time() - total_dur

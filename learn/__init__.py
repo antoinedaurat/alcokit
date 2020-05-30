@@ -1,12 +1,6 @@
-import torch
-from functools import partial
 from cafca.learn.train import TrainingLoop, default_batch_step
 import h5py
 import numpy as np
-
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("loading models module with device:", DEVICE)
 
 
 class Model(object):

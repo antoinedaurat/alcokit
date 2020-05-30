@@ -1,6 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore", message="PySoundFile failed. Trying audioread instead.")
-
+import torch
 
 # Constants
 # those are shared and imported everywhere. Having them here makes it easier
@@ -14,3 +14,6 @@ warnings.filterwarnings("ignore", message="PySoundFile failed. Trying audioread 
 N_FFT = 2048
 HOP_LENGTH = 512
 SR = 22050
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print("cafca initialized with device:", DEVICE)

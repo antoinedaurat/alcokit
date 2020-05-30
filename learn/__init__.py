@@ -26,6 +26,12 @@ class Model(object):
         self.db_path = db_path
         if db_path is not None:
             self.group = self.name + "/"
+            try:
+                f = h5py.File(db_path, "r")
+                f.close()
+            except OSError:
+                with h5py.File(db_path, "w") as f:
+                    print("created model Database", db_path)
             with h5py.File(db_path, "r+") as f:
                 f.create_group(self.group)
                 f[self.group].attrs.update({k: v if type(v) in (float, int, str) else str(v)

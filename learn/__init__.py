@@ -49,7 +49,7 @@ class Model(object):
         return self.loop.run(train_gen, n_epochs)
 
     def save_checkpoint(self, e):
-        if e > 0 and (e % 1024 == 0 or e == self.hp["n_epochs"]-1):
+        if e > 0 and (e % self.loop.period == 0 or e == self.hp["n_epochs"]-1):
             with h5py.File(self.db_path, "r+") as f:
                 name = self.group + "epoch_" + str(e) + "/"
                 if name in f:

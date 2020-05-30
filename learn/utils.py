@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from cafca.learn import DEVICE
+from cafca import DEVICE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from IPython import get_ipython

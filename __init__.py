@@ -1,6 +1,10 @@
 import warnings
+
+from cafca.learn import DEVICE
+
 warnings.filterwarnings("ignore", message="PySoundFile failed. Trying audioread instead.")
-import torch
+warnings.filterwarnings("ignore", message="Did not find hyperparameters at model hparams. Saving checkpoint without hyperparameters.")
+warnings.filterwarnings("ignore", message="The dataloader, train dataloader, does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` in the `DataLoader` init to improve performance.")
 
 # Constants
 # those are shared and imported everywhere. Having them here makes it easier
@@ -15,5 +19,3 @@ N_FFT = 2048
 HOP_LENGTH = 512
 SR = 22050
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("cafca initialized with device:", DEVICE)

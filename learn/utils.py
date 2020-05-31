@@ -3,7 +3,6 @@ import numpy as np
 from cafca import DEVICE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from IPython import get_ipython
 
 
 # Array <==> Tensor ops :
@@ -51,11 +50,3 @@ def slerp(val, low, high):
     return rv
 
 
-def is_notebook():
-    shell = get_ipython().__class__.__name__
-    if shell == 'ZMQInteractiveShell':
-        return True
-    elif shell == 'TerminalInteractiveShell':
-        return False
-    else:
-        return False

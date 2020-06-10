@@ -8,8 +8,7 @@ import h5py
 from cafca.util import audio, playlist, playthrough, show
 from cafca.extract.segment import SegmentList
 from cafca.hdf.api import Database, Fetcher
-from cafca.learn import Model, DefaultHP, DEVICE
-from cafca.learn.utils import to_torch, numcpu
+from cafca.learn import Model, DefaultHP, DEVICE, numcpu, to_torch
 from cafca.learn.modules import Pass, ParamedSampler, Abs
 from cafca.learn.losses import weighted_L1
 

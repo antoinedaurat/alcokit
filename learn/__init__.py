@@ -7,6 +7,32 @@ from time import time, gmtime
 import os
 import shutil
 
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print("cafca initialized with device:", DEVICE)
+
+
+# Array <==> Tensor ops :
+
+def numcpu(y):
+    if isinstance(y, torch.Tensor):
+        if y.requires_grad:
+            return y.detach().cpu().numpy()
+        return y.cpu().numpy()
+    else:  # tuples
+        return tuple(numcpu(x) for x in y)
+
+
+def to_torch(x):
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x).float().to(DEVICE)
+    elif isinstance(x, torch.Tensor):
+        if x.device == DEVICE:
+            return x.float()
+        else:
+            return x.float().to(DEVICE)
+    else:  # tuples
+        return tuple(to_torch(y) for y in x)
+
 
 def is_notebook():
     shell = get_ipython().__class__.__name__
@@ -46,13 +72,18 @@ class Model(pl.LightningModule):
 
     @property
     def path(self):
-        return self.root_dir + self.name + "/" + self.version
+        return self.root_dir + self.name + (("/" + self.version) if self.version else "") + "/"
 
     def __init__(self, **kwargs):
         super(Model, self).__init__()
         self.hp.update(kwargs)
         for k, v in self.hp.items():
             setattr(self, k, v)
+
+    def predict(self, *args):
+        args = to_torch(args)
+        outpt = self.forward(*args)
+        return numcpu(outpt)
 
     @staticmethod
     def load(clazz, version_dir, epoch=None):
@@ -90,25 +121,31 @@ class Model(pl.LightningModule):
         self.ep_since_era += 1
         now = time()
         if now - self.last_era_time >= self.era_duration:
-            torch.save(self.state_dict(), self.path + "/epoch=%i.ckpt" % self.current_epoch)
+            self._save_state("epoch=%i.ckpt" % self.current_epoch)
             self.on_era_end()
             self.last_era_time = now
 
     def on_train_end(self):
-        torch.save(self.state_dict(), self.path + "/final.ckpt")
-        self.save_loss()
+        self._save_state("final.ckpt")
+        self._save_loss()
         total_time = gmtime(time() - self.start_time)
         print("Training finished after {0} days {1} hours {2} mins {3} seconds".format(total_time[2] - 1, total_time[3],
                                                                                        total_time[4], total_time[5]))
 
-    def save_loss(self):
-        return np.save(self.path + "/tr_losses", np.array(self.losses))
+    def _save_loss(self):
+        return np.save(self.path + "tr_losses", np.array(self.losses))
+
+    def _save_hp(self):
+        torch.save(self.hp, self.path + "hparams.pt")
+
+    def _save_state(self, filename="state.ckpt"):
+        torch.save(self.state_dict(), self.path + filename)
 
     def get_trainer(self, **kwargs):
-        defaults = dict(gpus=1,
+        defaults = dict(gpus=1 if DEVICE.type == "cuda" else 0,
                         min_epochs=1,
-                        max_epochs=2048,
-                        reload_dataloaders_every_epoch=True,
+                        max_epochs=self.hp.get("max_epochs", 1024),
+                        reload_dataloaders_every_epoch=False,
                         checkpoint_callback=False,
                         progress_bar_refresh_rate=5,
                         logger=False,
@@ -122,17 +159,16 @@ class Model(pl.LightningModule):
             os.mkdir(self.root_dir)
         if not os.path.isdir(self.root_dir + self.name):
             os.mkdir(self.root_dir + self.name)
-        if self.version in os.listdir(self.root_dir + self.name) and not self.overwrite:
+        if self.version != "" and self.version in os.listdir(self.root_dir + self.name) and not self.overwrite:
             while self.version in os.listdir(self.root_dir + self.name):
                 self.version = "v" + str(int(self.version[1:]) + 1)
             os.mkdir(self.path)
         else:
             if os.path.isdir(self.path):
-                shutil.rmtree(self.path, ignore_errors=True)
+                if self.overwrite:
+                    shutil.rmtree(self.path, ignore_errors=True)
+                else:
+                    raise ValueError("Model has no version string but overwrite=False")
             os.mkdir(self.path)
-        print("current version:", self.version)
-        torch.save(self.hp, self.path + "/hparams.pt")
+        print("initialized directory:", self.path)
 
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("cafca initialized with device:", DEVICE)

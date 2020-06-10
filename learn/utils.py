@@ -1,30 +1,7 @@
 import torch
 import numpy as np
-from cafca import DEVICE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-
-
-# Array <==> Tensor ops :
-
-def numcpu(y):
-    if isinstance(y, torch.Tensor):
-        if y.requires_grad:
-            return y.detach().cpu().numpy()
-        return y.cpu().numpy()
-    else:  # tuples
-        return tuple(numcpu(x) for x in y)
-
-
-def to_torch(x):
-    if isinstance(x, np.ndarray):
-        return torch.from_numpy(x).float().to(DEVICE)
-    elif isinstance(x, torch.Tensor):
-        if x.device == DEVICE:
-            return x.float()
-        else:
-            return x.float().to(DEVICE)
-    return x
 
 
 def visualize_pca(z, tags=None):

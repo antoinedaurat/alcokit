@@ -88,7 +88,7 @@ def signal(S, hop_length=HOP_LENGTH):
     if S.dtype in (np.complex64, np.complex128):
         return librosa.istft(S, hop_length=hop_length)
     else:
-        return librosa.griffinlim(S, hop_length=hop_length)
+        return librosa.griffinlim(S, hop_length=hop_length, n_iter=32)
 
 
 def audio(S, hop_length=HOP_LENGTH, sr=SR):

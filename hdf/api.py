@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 from multiprocessing import cpu_count
 from cafca.extract.similarity import segments_sim, sort_graph
-from cafca.hdf.iter_utils import ssts, dts, irbod
-from torch.utils.data import DataLoader, Dataset
+from cafca.hdf.iter_utils import *
+from torch.utils.data import DataLoader, Dataset, Sampler, BatchSampler
+import torch
 import re
 
 
@@ -12,35 +13,10 @@ def is_m_frame(name):
     return re.search(re.compile(r"_m$"), name) is not None
 
 
-class Axis0Meta(object):
-    """
-    fake m_frame to pass ints, slices etc directly to the .h5 Datasets when setting the reference m_frame to "frames"
-    """
-
-    def __init__(self, h5_file, ds_name, transposed=True):
-        self.h5_file = h5_file
-        self.name = ds_name
-        self.T = transposed
-        with h5py.File(h5_file, "r") as f:
-            ds = f[self.name + "/data"]
-            attrs = {k: v for k, v in ds.attrs.items()}
-            self.N = ds.shape[0]
-        self.attrs = attrs
-
-    def __getitem__(self, item):
-        with h5py.File(self.h5_file, "r") as f:
-            rv = f[self.name + "/data"][item]
-        return rv.T if self.T else rv
-
-    def __len__(self):
-        return self.N
-
-
 class FeatureProxy(Dataset):
     def __init__(self, h5_file, ds_name, parent=None, transposed=True):
         self.h5_file = h5_file
         self.name = ds_name
-        self.axis0_m = Axis0Meta(self.h5_file, self.name, transposed)
         self.meta_m = None
         self.T = transposed
         if parent is not None:
@@ -174,26 +150,6 @@ class FeatureProxy(Dataset):
             return rv[0]
         return rv
 
-    def iterate(self, level, mode="length", **kwargs):
-        """
-
-        @param level:
-        @param mode:
-        @param kwargs:
-        @return: data
-        """
-        if mode == "duration":
-            self(level)
-            batches = irbod(self.iter_meta,
-                            kwargs.get("batch_size", 1),
-                            kwargs.get("shuffle", False),
-                            kwargs.get("drop_last", True))
-            kwargs["collate_fn"] = kwargs.get("collate_fn", list)
-            for idx_batch in batches:
-                yield kwargs["collate_fn"](self[b] for b in idx_batch)
-        else:
-            return DataLoader(self(level), **kwargs)
-
     def match(self, item):
         """
 
@@ -244,6 +200,70 @@ class FeatureProxy(Dataset):
         return [item_y.iloc[loc] for loc in locs]
 
 
+class GenericSampler(Sampler):
+    def __init__(self, indices):
+        self.indices = indices
+        self.N = len(indices)
+
+    def __iter__(self):
+        np.random.shuffle(self.indices)
+        return iter(self.indices)
+
+    def __len__(self):
+        return self.N
+
+
+class Fetcher(Dataset):
+    def __init__(self, feature):
+        self.feature = feature
+        self.f = h5py.File(feature.h5_file, "r")
+        self.data = self.f[feature.name + "/data"]
+        self.frame = None
+        self.N = None
+
+    def __getitem__(self, item):
+        return self.data[item]
+
+    @staticmethod
+    def _get_flat_sampler(frame_m):
+        return np.arange(frame_m["duration"].sum())
+
+    @staticmethod
+    def _get_as_is_sampler(frame_m):
+        return dtslice(frame_m)
+
+    @staticmethod
+    def _get_framed_sampler(frame_m, k=1, stride=1):
+        indices = np.arange(0, frame_m["duration"].sum()-k, stride)
+        return np.array([slice(i, i+k) for i in indices])
+
+    def load(self, frame_m, mode, pre_allocate=True, **kwargs):
+        if pre_allocate:
+            self.data = torch.cat([torch.from_numpy(x) for x in self.feature.gen_item(frame_m)])
+            self.f.close()
+        if mode == "flat":
+            sampler = Fetcher._get_flat_sampler(frame_m)
+            collate = torch.stack
+        elif mode == "as_is":
+            sampler = Fetcher._get_as_is_sampler(frame_m)
+            collate = lambda x: x
+        elif mode == "framed":
+            sampler = Fetcher._get_framed_sampler(frame_m, kwargs.get("k", 1), kwargs.get("stride", 1))
+            collate = torch.stack
+        elif mode == "normalized":
+            sampler = None
+            collate = None
+        else:
+            raise ValueError("value for mode argument not recognized: " + mode)
+
+        sampler = GenericSampler(sampler)
+        for k in ["pre_allocate", "k", "stride", "min_dur", "max_dur"]:
+            if k in kwargs:
+                kwargs.pop(k)
+
+        return DataLoader(self, sampler=sampler, collate_fn=collate, **kwargs)
+
+
 class Database(object):
     def __init__(self, h5_file):
         self.h5_file = h5_file
@@ -291,6 +311,4 @@ class Database(object):
 
         return register
 
-    def add_feature(self, name, transform, own_feature):
-        # TODO
-        pass
+

@@ -50,7 +50,7 @@ def _shift_vocoder(S, rate):
                        res_type="kaiser_best")
 
     # Crop to the same dimension as the input
-    return util.fix_length(y_shift, f2s(S.shape[1], HOP_LENGTH))
+    return stft(util.fix_length(y_shift, f2s(S.shape[1], HOP_LENGTH)))
 
 
 def _shift_rubber(S, intv):  # TODO : DOES THIS SUPPORT QUARTER-TONES ??

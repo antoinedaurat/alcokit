@@ -11,6 +11,11 @@ def dts(item):
     return splits
 
 
+def dtslice(item):
+    splits = dts(item)
+    return np.array([slice(a, b) for a, b in zip(np.r_[0, splits[:-1]], splits)])
+
+
 def ssts(item):
     """
     Start-Stop To Slices
@@ -79,3 +84,45 @@ def ibod(item, batch_dur=1024, drop_last=False):
     In Batches Of Duration
     """
     return irbod(item, batch_dur, False, drop_last)
+
+
+def split_divided(x, min_n, max_n):
+    mod = min(range(min_n, max_n + 1), key=lambda m: x % m if min_n <= x % m <= max_n else (x % m) * max_n)
+    return [mod for _ in range(x // mod)] + ([x % mod] if x % mod >= 1 else [])
+
+
+def split_normalized(iterable, min_d, max_d):
+    """
+    splits or joins the duration returned by an iterator to constrain them between min_d and max_d
+    @param iterable:
+    @param min_d:
+    @param max_d:
+    @return:
+    """
+    while True:
+        try:
+            d = next(iterable)
+        except StopIteration:
+            break
+        if min_d <= d <= max_d:
+            yield d
+
+        elif max_d < d:
+            divd = split_divided(d, min_d, max_d)
+
+            for di in divd:
+                yield di
+
+        elif d < min_d:
+            while d < min_d:
+                try:
+                    nxt = next(iterable)
+                except StopIteration:
+                    break
+                d += nxt
+            if d <= max_d:
+                yield d
+            else:
+                for di in split_divided(d, min_d, max_d):
+                    yield di
+

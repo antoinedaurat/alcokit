@@ -101,6 +101,8 @@ class Segment(FFT):
             return n
         elif getattr(n, "__iter__", None) is not None:
             return self.nearest_len(n) if not mod else self.nearest_len_by_mod(n)
+        else:
+            return n
 
     def stretch(self, m, method="rbs"):
         m = self._check_target(m, mod=False)

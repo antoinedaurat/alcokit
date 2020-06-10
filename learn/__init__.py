@@ -82,8 +82,9 @@ class Model(pl.LightningModule):
 
     def predict(self, *args):
         args = to_torch(args)
-        outpt = self.forward(*args)
-        return numcpu(outpt)
+        with torch.no_grad():
+            output = self.forward(*args)
+        return numcpu(output)
 
     @staticmethod
     def load(clazz, version_dir, epoch=None):

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from cafca.learn.modules import ParamedSampler, Pass
 from cafca.learn.losses import weighted_L1
-from cafca.learn import Model, DefaultHP
+from cafca.learn import Model
 
 
 class EncoderRNN(nn.Module):
@@ -54,9 +54,9 @@ class DecoderRNN(nn.Module):
         output = output.view(*output.size()[:-1], self.h, 2).sum(dim=-1)
 
         if hiddens is None or cells is None:
-            output2, (hiddens, cells) = self.rnn2(x)
+            output2, (hiddens, cells) = self.rnn2(output)
         else:
-            output2, (hiddens, cells) = self.rnn2(x, (hiddens, cells))
+            output2, (hiddens, cells) = self.rnn2(output, (hiddens, cells))
         output2 = output2.view(*output2.size()[:-1], self.h, 2).sum(dim=-1)
 
         return output + output2, (hiddens, cells)

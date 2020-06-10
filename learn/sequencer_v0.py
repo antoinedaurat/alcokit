@@ -63,16 +63,13 @@ class DecoderRNN(nn.Module):
 
 
 class Sequencer(Model):
-    db_path = "nessun_dorma/model_dbs/chunk2chunk/nessun_only.h5"
-    name = "all_versions"
-    ckpt_period = 60
-    overwrite = False
 
     def __init__(self,
                  # instance
                  root_dir="test_model/",
                  name="sequencer",
                  version="v0",
+                 overwrite=False,
 
                  # module
                  input_d=1025,
@@ -89,14 +86,14 @@ class Sequencer(Model):
                  lr=1e-4,
                  max_epochs=8192,
                  **kwargs):
-        args_d = dict(root_dir=root_dir, name=name, version=version,
+        args_d = dict(root_dir=root_dir, name=name, version=version, overwrite=overwrite,
                       input_d=input_d, h=h, num_layers=num_layers, bottleneck=bottleneck, n_fc=n_fc, loss_fn=loss_fn,
                       batch_size=batch_size, inpt_len=inpt_len, trgt_len=trgt_len, lr=lr, max_epochs=max_epochs)
         # Model creates object's attributes for each keyword param
         super(Sequencer, self).__init__(**args_d, **kwargs)
 
         # modules
-        self.enc = EncoderRNN(self.h, self.num_layers, self.bottleneck, self.n_fc)
+        self.enc = EncoderRNN(self.input_d, self.h, self.num_layers, self.bottleneck, self.n_fc)
         self.dec = DecoderRNN(self.h, self.num_layers, self.bottleneck)
         self.sampler = ParamedSampler(self.h, self.h, pre_activation=Pass)
         self.sampler_out = ParamedSampler(self.h, self.input_d, pre_activation=Pass)

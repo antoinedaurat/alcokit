@@ -68,7 +68,7 @@ class DefaultHP(dict):
 
 
 class Model(pl.LightningModule):
-    hp = DefaultHP()
+    hparams = DefaultHP()
 
     @property
     def path(self):
@@ -76,8 +76,8 @@ class Model(pl.LightningModule):
 
     def __init__(self, **kwargs):
         super(Model, self).__init__()
-        self.hp.update(kwargs)
-        for k, v in self.hp.items():
+        self.hparams.update(kwargs)
+        for k, v in self.hparams.items():
             setattr(self, k, v)
 
     def predict(self, *args):
@@ -137,7 +137,7 @@ class Model(pl.LightningModule):
         return np.save(self.path + "tr_losses", np.array(self.losses))
 
     def _save_hp(self):
-        torch.save(self.hp, self.path + "hparams.pt")
+        torch.save(self.hparams, self.path + "hparams.pt")
 
     def _save_state(self, filename="state.ckpt"):
         torch.save(self.state_dict(), self.path + filename)
@@ -145,7 +145,7 @@ class Model(pl.LightningModule):
     def get_trainer(self, **kwargs):
         defaults = dict(gpus=1 if DEVICE.type == "cuda" else 0,
                         min_epochs=1,
-                        max_epochs=self.hp.get("max_epochs", 1024),
+                        max_epochs=self.hparams.get("max_epochs", 1024),
                         reload_dataloaders_every_epoch=False,
                         checkpoint_callback=False,
                         progress_bar_refresh_rate=5,

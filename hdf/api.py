@@ -221,8 +221,19 @@ class Fetcher(Dataset):
         self.frame = None
         self.N = None
 
+    def get_input(self, item):
+        return self[item]
+
+    def get_target(self, item):
+        return self[item]
+
     def __getitem__(self, item):
         return self.data[item]
+
+    @staticmethod
+    def zip_stack(batch_list):
+        inpt, trgt = zip(*batch_list)
+        return torch.stack(inpt), torch.stack(trgt)
 
     @staticmethod
     def _get_flat_sampler(frame_m):

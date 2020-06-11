@@ -245,7 +245,7 @@ class Fetcher(Dataset):
 
     @staticmethod
     def _get_framed_sampler(frame_m, k=1, stride=1):
-        indices = np.arange(0, frame_m["duration"].sum()-k, stride)
+        indices = np.arange(0, frame_m["duration"].sum()-(2*k), stride)
         return np.array([slice(i, i+k) for i in indices])
 
     def load(self, frame_m, mode, pre_allocate=True, **kwargs):

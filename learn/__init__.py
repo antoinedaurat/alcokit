@@ -68,7 +68,6 @@ class DefaultHP(dict):
 
 
 class Model(pl.LightningModule):
-    hparams = DefaultHP()
 
     @property
     def path(self):
@@ -76,6 +75,7 @@ class Model(pl.LightningModule):
 
     def __init__(self, **kwargs):
         super(Model, self).__init__()
+        self.hparams = DefaultHP()
         self.hparams.update(kwargs)
         for k, v in self.hparams.items():
             setattr(self, k, v)

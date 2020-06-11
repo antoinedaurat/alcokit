@@ -272,7 +272,7 @@ class Fetcher(Dataset):
             if k in kwargs:
                 kwargs.pop(k)
 
-        return DataLoader(self, sampler=sampler, collate_fn=collate, **kwargs)
+        return DataLoader(self, sampler=sampler, collate_fn=kwargs.get("collate_fn", collate), **kwargs)
 
 
 class Database(object):

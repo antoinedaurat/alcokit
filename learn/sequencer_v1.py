@@ -50,13 +50,13 @@ class DecoderRNN(nn.Module):
         if hiddens is None or cells is None:
             output, (_, _) = self.rnn1(x)
         else:
-            output, (_, _) = self.rnn1(x)  # V0 decoder doesn't get hidden states from enc !
+            output, (_, _) = self.rnn1(x, (hiddens, cells))  # V1 decoder DOES GET hidden states from enc !
         output = output.view(*output.size()[:-1], self.h, 2).sum(dim=-1)
 
         if hiddens is None or cells is None:
             output2, (hiddens, cells) = self.rnn2(output)
         else:
-            output2, (hiddens, cells) = self.rnn2(output)  # V0 residual doesn't get hidden states from first lstm !
+            output2, (hiddens, cells) = self.rnn2(output, (hiddens, cells))  # V1 residual DOES GET hidden states from first lstm !
         output2 = output2.view(*output2.size()[:-1], self.h, 2).sum(dim=-1)
 
         return output + output2, (hiddens, cells)

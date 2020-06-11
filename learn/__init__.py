@@ -50,21 +50,20 @@ else:
     from tqdm import tqdm
 
 
-class DefaultHP(dict):
-    def __init__(self, **kwargs):
-        defaults = dict(
-            lr=1e-2,
-            max_epochs=1024,
-            batch_size=32,
-            loss_fn=nn.L1Loss(reduction="none"),
-            root_dir="test_model/",
-            name="model",
-            version="v0",
-            overwrite=False,
-            era_duration=30.
-        )
-        super(DefaultHP, self).__init__(**kwargs)
-        self.update(defaults)
+def DefaultHP(**kwargs):
+    defaults = dict(
+        lr=1e-2,
+        max_epochs=1024,
+        batch_size=32,
+        loss_fn=nn.L1Loss(reduction="none"),
+        root_dir="test_model/",
+        name="model",
+        version="v0",
+        overwrite=False,
+        era_duration=30.
+    )
+    defaults.update(kwargs)
+    return defaults
 
 
 class Model(pl.LightningModule):

@@ -271,8 +271,8 @@ class Fetcher(Dataset):
         for k in ["pre_allocate", "k", "stride", "min_dur", "max_dur"]:
             if k in kwargs:
                 kwargs.pop(k)
-
-        return DataLoader(self, sampler=sampler, collate_fn=kwargs.get("collate_fn", collate), **kwargs)
+        kwargs["collate_fn"] = kwargs.get("collate_fn", collate)
+        return DataLoader(self, sampler=sampler, **kwargs)
 
 
 class Database(object):

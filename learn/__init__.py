@@ -96,6 +96,7 @@ class Model(pl.LightningModule):
 
     def on_train_start(self):
         self.init_directories()
+        self._save_hp()
         self.ep_bar = tqdm(range(1, 1 + self.max_epochs), unit="epoch",
                            position=0, leave=False, dynamic_ncols=True)
         self.ep_losses = []

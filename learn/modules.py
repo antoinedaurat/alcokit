@@ -54,11 +54,11 @@ class FcStack(nn.Module):
 
 
 class ConvUnit(nn.Module):
-    def __init__(self, f, k, s, p, d, batch_norm, activation, pool, dropout):
+    def __init__(self, fin, fout, k=2, s=1, p=0, d=1, batch_norm=None, activation=None, pool=None, dropout=0.):
         super(ConvUnit, self).__init__()
         modules = [x for x in [
-            nn.Conv2d(f[0], f[1], k, s, p, d),
-            nn.BatchNorm2d(f[1]) if batch_norm else None,
+            nn.Conv2d(fin, fout, k, s, p, d),
+            nn.BatchNorm2d(fout) if batch_norm else None,
             activation() if activation else None,
             pool if pool else None,
             nn.Dropout(dropout) if dropout else None]
@@ -70,12 +70,12 @@ class ConvUnit(nn.Module):
 
 
 class TConvUnit(nn.Module):
-    def __init__(self, f, k, s, p, d, batch_norm, activation, pool, dropout):
+    def __init__(self, fin, fout, k, s, p, d, batch_norm, activation, pool, dropout):
         super(TConvUnit, self).__init__()
         modules = [x for x in [
             pool if pool else None,
-            nn.ConvTranspose2d(f[1], f[0], k, s, p, dilation=d),
-            nn.BatchNorm2d(f[0]) if batch_norm else None,
+            nn.ConvTranspose2d(fin, fout, k, s, p, dilation=d),
+            nn.BatchNorm2d(fout) if batch_norm else None,
             activation() if activation else None,
             nn.Dropout(dropout) if dropout else None]
                    if x is not None]
@@ -113,8 +113,8 @@ def poolpair(*args):
 
 def convpair(f, k, s, p, d, batch_norm, activation, poolargs, dropout):
     poolp = poolpair(*poolargs) if poolargs else (False, False)
-    conv = ConvUnit(f, k, s, p, d, batch_norm, activation, poolp[0], dropout)
-    conv_t = TConvUnit(f, k, s, p, d, batch_norm, activation, poolp[1], dropout)
+    conv = ConvUnit(f[0], f[1], k, s, p, d, batch_norm, activation, poolp[0], dropout)
+    conv_t = TConvUnit(f[1], f[0], k, s, p, d, batch_norm, activation, poolp[1], dropout)
     return conv, conv_t
 
 

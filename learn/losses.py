@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-def weighted_L1(x, y, bias=1., dim=0):
+def weighted_L1(x, y, bias=1., dim=(0, -1)):
     feat_l1 = nn.L1Loss(reduction="none")(x, y).sum(dim=dim, keepdim=True)
     feat_w = bias + feat_l1 / feat_l1.sum()
     return (feat_w * feat_l1).sum()

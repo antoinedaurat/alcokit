@@ -214,21 +214,25 @@ class GenericSampler(Sampler):
 
 
 class Fetcher(Dataset):
-    def __init__(self, feature):
-        self.feature = feature
-        self.f = h5py.File(feature.h5_file, "r")
-        self.data = self.f[feature.name + "/data"]
+    def __init__(self, input_feature, target_shift=None):
+        self.feature = input_feature
+        self.f = h5py.File(input_feature.h5_file, "r")
+        self.data = self.f[input_feature.name + "/data"]
+        self.target_shift = target_shift
         self.frame = None
         self.N = None
 
     def get_input(self, item):
-        return self[item]
+        return self.data[item]
 
     def get_target(self, item):
-        return self[item]
+        return self.data[item.stop:item.stop+self.target_shift]
 
     def __getitem__(self, item):
-        return self.data[item]
+        if self.target_shift is not None:
+            return self.get_input(item), self.get_target(item)
+        else:
+            return self.get_input(item)
 
     @staticmethod
     def zip_stack(batch_list):

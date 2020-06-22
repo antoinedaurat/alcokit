@@ -3,7 +3,10 @@ import numpy as np
 import pandas as pd
 import os
 from multiprocessing import cpu_count, Pool
-from cafca.util import audio_fs_dict
+from cafca.util import fs_dict, is_audio_file
+from cafca.hdf.api import Database
+from cafca.score import Score
+from cafca.extract import default_extract_func
 import logging
 
 logger = logging.getLogger()
@@ -24,20 +27,13 @@ def sizeof_fmt(num, suffix='b'):
     return "%.1f%s%s" % (num, 'Yi', suffix)
 
 
-def _file_to_db(abs_path, extract_func):
-    logger.info("making temp db for %s" % abs_path)
-    features = {}
-    tmp_db = ".".join(abs_path.split(".")[:-1] + ["h5"])
-    with h5py.File(tmp_db, "w") as f:
-        f.attrs["path"] = abs_path
-        rv = extract_func(abs_path)
-        for name, (attrs, data) in rv.items():
-            ds = f.create_dataset(name=name, shape=data.shape, data=data)
-            ds.attrs.update(attrs)
-            features[name] = {"dtype": ds.dtype, "shape": ds.shape, "size": sizeof_fmt(data.nbytes)}
-            f.flush()
-    f.close()
-    return tmp_db, features
+def _empty_info(features_names):
+    tuples = [("directory", ""), ("name", ""),
+              *[t for feat in features_names for t in [(feat, "dtype"), (feat, "shape"), (feat, "size")]
+                if feat != "score"]
+              ]
+    idx = pd.MultiIndex.from_tuples(tuples)
+    return pd.DataFrame([], columns=idx)
 
 
 def split_path(path):
@@ -46,138 +42,139 @@ def split_path(path):
     return prefix, file_name
 
 
-def _make_temp_dbs(root_directory,
-                   extract_func,
-                   n_cores=cpu_count()):
-    root_name, tree = audio_fs_dict(root_directory)
+def file_to_db(abs_path, extract_func=default_extract_func, mode="w"):
+    """
+    if mode == "r+" this will either:
+        - raise an Exception if the feature already exists
+        - concatenate data along the "feature_axis", assuming that each feature correspond to the same file
+          or file collections.
+          If you want to concatenate dbs along the "file_axis" consider using `concatenate_dbs(..)`
+    @param abs_path:
+    @param extract_func:
+    @param mode:
+    @return:
+    """
+    logger.info("making db for %s" % abs_path)
+    tmp_db = ".".join(abs_path.split(".")[:-1] + ["h5"])
+    rv = extract_func(abs_path)
+    info = _empty_info(rv.keys())
+    info.loc[0, [("directory", ""), ("name", "")]] = split_path(abs_path)
+    with h5py.File(tmp_db, mode) as f:
+        for name, (attrs, data) in rv.items():
+            if issubclass(type(data), np.ndarray):
+                ds = f.create_dataset(name=name, shape=data.shape, data=data)
+                ds.attrs.update(attrs)
+                info.loc[0, name] = ds.dtype, ds.shape, sizeof_fmt(data.nbytes)
+            elif issubclass(type(data), pd.DataFrame):
+                pd.DataFrame(data).to_hdf(tmp_db, name, "r+")
+            f.flush()
+        if "info" in f.keys():
+            prior = pd.read_hdf(tmp_db, "info", "r")
+            info = pd.concat((prior, info.iloc[:, 2:]), axis=1)
+        info.to_hdf(tmp_db, "info", "r+")
+    f.close()
+    return tmp_db
+
+
+def make_db_for_each_file(root_directory,
+                          extract_func=default_extract_func,
+                          extension_filter=is_audio_file,
+                          n_cores=cpu_count()):
+    root_name, tree = fs_dict(root_directory, extension_filter)
     args = [(os.path.join(dir, file), extract_func)
             for dir, files in tree.items() for file in files]
     with Pool(n_cores) as p:
-        tmp_dbs = p.starmap(_file_to_db, args)
-    df = pd.DataFrame.from_dict({split_path(file): {(f, k): val for f, d in features.items()
-                                                    for k, val in d.items()}
-                                 for file, features in tmp_dbs},
-                                orient="index")
-    df = df.rename_axis(index=["directory", "name"])
-    return df
+        tmp_dbs = p.starmap(file_to_db, args)
+    return tmp_dbs
 
 
-def _collect_slices_metadatas_from(files, keywords):
-    logger.info("collecting segments' metadata")
-    metadatas = {}
-    for name in keywords:
-        frames = []
-        offset = 0
-        for file in files:
-            # join directory and file_name
-            file = "/".join(file)
-            with h5py.File(file, "r") as f:
-                segments = f[name][()]
-                # last elements in segments should always be the length of the whole segmented data
-                durations = np.diff(segments)
-                file = split_path(file)
-                index = pd.MultiIndex.from_product([[file[0]], [file[1].strip(".h5")], range(len(durations))],
-                                                   names=["directory", "name", "index"])
-                # get the metadata (file, index, start, stop, duration)
-                data = list(zip(offset + segments[:-1], offset + np.cumsum(durations), durations))
-                df = pd.DataFrame(data, index=index, columns=["start", "stop", "duration"])
-                # add (file, index) as columns
-                df = df.reset_index()
-                frames += [df]
-                # increment the start-index for the next file
-                offset += segments[-1]
-                f.close()
-        metadatas[name] = pd.concat(frames, ignore_index=True)
-    return metadatas
+def collect_infos(tmp_dbs):
+    infos = []
+    for db in tmp_dbs:
+        infos += [Database(db).info]
+    return pd.concat(infos, ignore_index=True)
 
 
-def _aggregate_from_metadata(target_file, metadata, mode="w", **kwargs):
-    """
-    !!! assumes that all features have the same axis 0 !!!
-    @param target_file:
-    @param metadata:
-    @param mode:
-    @param kwargs:
-    @return:
-    """
-    features = set([col for col in metadata.T.index.get_level_values(0)])
-    with_meta_m = True  # gate to compute and store meta_m only with the first feature
-    with h5py.File(target_file, mode) as f:
-        for feature in features:
-            dtype = metadata[feature, "dtype"].unique().item()
-            shapes = np.array([shape for shape in metadata[feature]["shape"]])
-            meta = {}
-            logger.info("copying %s" % feature)
-            assert np.all(shapes[:, 1:] == shapes[0, 1:])
-            # get the shape of the aggregated DS
-            offsets = np.cumsum(shapes[:, 0])
-            total_shape = (offsets[-1], *shapes[0, 1:])
-            offsets = np.r_[0, offsets[:-1]]
-            # create the ds
-            feature_ds = f.create_dataset(feature + "/data", dtype=dtype, shape=total_shape, **kwargs)
-            # all the tmp_dbs should have the same attrs so we only keep track of unique items
-            attrs = set()
-            # copy each file
-            for i, file in zip(range(len(offsets)), metadata.index):
-                # join directory and file_name
-                file = "/".join(file)
-                # get the source
-                sub_db = h5py.File(file, "r+")
-                # get the slice
-                start, stop = offsets[i], offsets[i] + shapes[i, 0]
-                # copy
-                feature_ds[start:stop] = sub_db[feature][()]
-                # intersect the attrs
-                attrs = attrs.union(set(sub_db[feature].attrs.items()))
-                # clean up
-                sub_db.close()
-                f.flush()
-                # store the metadata of this file
-                file = split_path(file)
-                if with_meta_m:
-                    meta[(file[0], file[1].strip(".h5"))] = dict(index=i, start=start, stop=stop, duration=shapes[i, 0])
-            # add attrs to the DS
-            for key, value in attrs:
-                feature_ds.attrs[key] = value
-            # this will be handy to figure out batch_size when iterating/querying etc.
-            feature_ds.attrs["axis0_nbytes"] = feature_ds[0].nbytes
-            f.flush()
-            # store the metadata for the whole feature
-            if with_meta_m:
-                meta = pd.DataFrame.from_dict(meta, orient="index")
-                meta = meta.rename_axis(index=["directory", "name"])
-                meta.reset_index().to_hdf(target_file, "meta_m", "r+")
-                with_meta_m = False
-        # store the metadata for the whole db
-        metadata = metadata.reset_index()
-        metadata.to_hdf(target_file, "info", "r+")
-    f.close()
-    return None
+def collect_scores(tmp_dbs):
+    scores = []
+    offset = 0
+    for db in tmp_dbs:
+        scr = Database(db).score
+        scr.loc[:, ("start", "stop")] = scr.loc[:, ("start", "stop")].values + offset
+        scr.loc[:, "name"] = ".".join(db.split(".")[:-1])
+        scores += [scr]
+        offset = scr.last_stop
+    return pd.DataFrame(pd.concat(scores, ignore_index=True))
 
 
-def _add_metadata(db_path, key, metadata):
-    metadata.to_hdf(db_path, key=key + "/metadata", mode="r+")
-    return None
+def zip_prev_next(iterable):
+    return zip(iterable[:-1], iterable[1:])
 
 
-def db_factory(root_directory, target_file, mode, extract_func, axis0_kws=None, n_cores=cpu_count(), **kwargs):
-    logger.info("storing features in temp dbs")
-    tmp_metadata = _make_temp_dbs(root_directory, extract_func, n_cores)
+def ds_definitions_from_infos(infos):
+    tb = infos.iloc[:, 2:].T
+    paths = ["/".join(parts) for parts in infos.iloc[:, :2].values]
+    # change the paths' extensions
+    paths = [".".join(path.split(".")[:-1]) + ".h5" for path in paths]
+    features = set(tb.index.get_level_values(0))
+    ds_definitions = {}
+    for f in features:
+        dtype = tb.loc[(f, "dtype"), :].unique().item()
+        shapes = tb.loc[(f, "shape"), :].values
+        dims = shapes[0][1:]
+        assert all(shp[1:] == dims for shp in
+                   shapes[1:]), "all features should have the same dimensions but for the first axis"
+        layout = Score.from_duration([s[0] for s in shapes])
+        ds_shape = (layout.last_stop, *dims)
+        layout.index = paths
+        ds_definitions[f] = {"shape": ds_shape, "dtype": dtype, "layout": layout}
+    return ds_definitions
 
-    logger.info("copying temp dbs to target file")
-    _aggregate_from_metadata(target_file, tmp_metadata, mode, **kwargs)
 
-    if axis0_kws is not None:
-        axis0_metadata = _collect_slices_metadatas_from(list(tmp_metadata.index), axis0_kws)
-        for name, meta in axis0_metadata.items():
-            meta.to_hdf(target_file, key=name + "_m", mode="r+")
+def create_datasets_from_defs(target, defs, mode="w"):
+    with h5py.File(target, mode) as f:
+        for name, params in defs.items():
+            f.create_dataset(name, shape=params["shape"], dtype=params["dtype"])
+            layout = params["layout"]
+            layout.reset_index(drop=False, inplace=True)
+            layout.rename(columns={"index": "name"})
+            pd.DataFrame(layout).to_hdf(target, "layouts/" + name, "r+")
+        f.close()
+    return
 
-    # clean up
-    for file in tmp_metadata.index:
-        # join directory and file_name
-        file = "/".join(file)
-        os.remove(file)
 
-    logger.info("done! following Groups and Datasets are now stored in '{}':".format(target_file))
-    h5py.File(target_file, "r").visititems(lambda x, obj: logger.info("name={} ; object={}".format(x, str(obj))))
-    return target_file
+def make_integration_args(target):
+    args = []
+    with h5py.File(target, "r") as f:
+        for feature in f["layouts"].keys():
+            df = Score(pd.read_hdf(target, "layouts/" + feature))
+            args += [(target, source, feature, indices) for source, indices in
+                     zip(df.index, df.slices(time_axis=0))]
+    return args
+
+
+def integrate(target, source, key, indices):
+    with h5py.File(source, "r") as src:
+        data = src[key][()]
+    with h5py.File(target, "r+") as trgt:
+        trgt[key][indices] = data
+    return
+
+
+def aggregate_dbs(target, dbs, mode="w", remove_sources=False):
+    infos = collect_infos(dbs)
+    score = collect_scores(dbs)
+    definitions = ds_definitions_from_infos(infos)
+    create_datasets_from_defs(target, definitions, mode)
+    args = make_integration_args(target)
+    for arg in args:
+        integrate(*arg)
+    if remove_sources:
+        for src in dbs: os.remove(src)
+    infos.to_hdf(target, "info", "r+")
+    score.to_hdf(target, "score", "r+")
+
+
+def make_root_db(db_name, root_directory, extension_filter, extract_func, n_cores=cpu_count(), remove_sources=True):
+    dbs = make_db_for_each_file(root_directory, extract_func, extension_filter, n_cores)
+    aggregate_dbs(db_name, dbs, "w", remove_sources)

@@ -1,14 +1,13 @@
 from multiprocessing import cpu_count
 import numpy as np
 from sklearn.metrics import pairwise_distances
-from cafca.hdf.iter_utils import dts
 from cafca.extract.utils import mp_foreach
 
 
 def sim_graph(x_tuple, y_tuple, metric, reduce_func=None, n_jobs=None):
     dbx, dby = x_tuple[0], y_tuple[0]
     item_x, item_y = x_tuple[1], y_tuple[1]
-    slice_x, slice_y = dts(item_x), dts(item_y)
+    slice_x, slice_y = item_x.slices(0), item_y.slices(0)
     data_x, data_y = np.concatenate(dbx[item_x], axis=int(dbx.T)), np.concatenate(dby[item_y], axis=int(dby.T))
     data_x = data_x.T if dbx.T else data_x
     data_y = data_y.T if dby.T else data_y

@@ -1,10 +1,13 @@
+from itertools import combinations
+
 import librosa
-import matplotlib.pyplot as plt
 import numpy as np
+from librosa.sequence import dtw
 from sklearn.decomposition import non_negative_factorization
+from sklearn.metrics import pairwise_distances
+
 from cafca.fft import FFT
-from cafca.util import t2f, t2s, f2t, show, signal, audio
-from cafca import HOP_LENGTH, SR
+from cafca.util import t2f
 
 
 def harmonic_percussive(S, margin=1):
@@ -48,72 +51,17 @@ def REP_SIM(S,
     return S_background, S_foreground
 
 
-def alignement(X, Y,
-               compute_chroma=True,
-               metric='cosine'):
-    if compute_chroma:
-        x = librosa.feature.chroma_stft(S=abs(X), tuning=0, norm=2)
-        y = librosa.feature.chroma_stft(S=abs(Y), tuning=0, norm=2)
-    else:
-        x = abs(X)
-        y = abs(Y)
-
-    D, wp = librosa.sequence.dtw(X=x, Y=y, metric=metric, subseq=True)
-
-    return D, wp[::-1]
+def optimal_path(x, y):
+    return dtw(C=pairwise_distances(abs(x.T), abs(y.T), metric='cosine'))[1][::-1]
 
 
-def random_path(X, Y, D, wp,
-                mode="path",
-                start_with=0,  # i.e X ; 1 for Y
-                start_frame=100,
-                n_crossing=3,
-                min_step_duration=2.,
-                max_step_duration=2.,  # or float
-                xfade_dur=.1
-                ):
-    min_step_duration = int(t2f(min_step_duration, sr=22050, hop_length=1024))
-    if max_step_duration is None:
-        max_step_duration = X.shape[1] // n_crossing
-    else:
-        max_step_duration = int(t2f(max_step_duration, sr=22050, hop_length=1024))
-
-    crossing_durs = np.random.randint(min_step_duration, max_step_duration, size=n_crossing)
-
-    if mode == "path":
-        idx_getter = lambda k, t, trim: wp[t, k]
-    elif mode == "max":
-        agg = np.argmax
-        idx_getter = lambda k, t, trim: int(agg(D[t, :-trim])) if k == 0 else int(agg(D.T[t, :-trim]))
-    elif mode == "min":
-        agg = np.argmin
-        idx_getter = lambda k, t, trim: int(agg(D[t, :-trim])) if k == 0 else int(agg(D.T[t, :-trim]))
-    else:
-        raise ValueError("value %s for 'mode' is not recognized" % mode)
-
-    maxt_x, maxt_y = D.shape
-    last_i = start_frame
-    xfade_dur = int(t2s(xfade_dur, sr=22050)) // 2
-    pieces = np.zeros(xfade_dur)
-    fade_in = np.arange(xfade_dur) / xfade_dur
-    fade_out = np.arange(xfade_dur)[::-1] / xfade_dur
-    for i, d in enumerate(crossing_durs, int(bool(start_with))):
-        k = i % 2
-
-        print(["X", "Y"][k], "from frame", last_i, "to", last_i + d, " (= %.3f seconds)" % f2t(d))
-
-        z = [X, Y][k][:, last_i:last_i + d]
-        last_i += d
-        last_i = idx_getter(k, last_i % [maxt_x, maxt_y][k], d + 1)
-
-        # join the audios :
-        z = signal(z, X.hop_length if isinstance(X, FFT) else HOP_LENGTH)
-        z[:xfade_dur] *= fade_in
-        z[-xfade_dur:] *= fade_out
-        pieces[-xfade_dur:] += z[:xfade_dur]
-        pieces = np.concatenate((pieces, z[xfade_dur:]))
-
-    return audio(pieces, *((X.hop_length, X.sr) if isinstance(X, FFT) else (HOP_LENGTH, SR)))
+def align(*ffts):
+    path_dict = {}
+    N = len(ffts)
+    for i, j in combinations(range(N), r=2):
+        path_dict[(i, j)] = optimal_path(ffts[i], ffts[j])
+        print(i, j)
+    return path_dict
 
 
 def decompose(X,

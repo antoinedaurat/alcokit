@@ -5,6 +5,19 @@ from librosa.display import specshow
 import matplotlib.pyplot as plt
 import IPython.display as ipd
 from cafca import HOP_LENGTH, SR, N_FFT
+import pickle
+
+
+def save_pickle(obj, path):
+    with open(path, "wb") as f:
+        f.write(pickle.dumps(obj))
+    return None
+
+
+def load_pickle(path):
+    with open(path, "rb") as f:
+        obj = pickle.loads(f.read())
+    return obj
 
 
 # OS
@@ -12,18 +25,18 @@ def is_audio_file(file):
     return file.split(".")[-1] in ("wav", "aif", "aiff", "mp3", "m4a", "mp4") and "._" not in file
 
 
-def flat_dir(directory):
+def flat_dir(directory, ext_filter=is_audio_file):
     files = []
     for root, dirname, filenames in os.walk(directory):
         for f in filenames:
-            if is_audio_file(f):
+            if ext_filter(f):
                 files += [os.path.join(root, f)]
     return sorted(files)
 
 
-def audio_fs_dict(root):
+def fs_dict(root, extension_filter=is_audio_file):
     root_name = os.path.split(root.strip("/"))[-1]
-    items = [(d, list(filter(is_audio_file, f))) for d, _, f in os.walk(root)]
+    items = [(d, list(filter(extension_filter, f))) for d, _, f in os.walk(root)]
     if not items:
         raise ValueError("no audio files found on path %s" % root)
     return root_name, dict(item for item in items if len(item[1]) > 0)

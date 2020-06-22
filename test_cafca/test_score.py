@@ -143,54 +143,6 @@ class TestScore(unittest.TestCase):
         assert sc.span == span1 + span2
         assert len(sc) == len(sc1) + len(sc2)
 
-    # def test_sampler(self):
-    #     sc = Score.from_stop([3, 6, 9, 12])
-    #     samp = sc.to_sampler(flat=False, shuffle=False, batch_size=None, drop_last=False)
-    #     idx = [x for x in samp]
-    #     assert len(idx) == 4
-    #
-    #     samp = sc.to_sampler(flat=False, shuffle=False, batch_size=2, drop_last=False)
-    #     idx = [x for x in samp]
-    #     assert len(idx) == 2
-    #     assert all(len(x) == 2 for x in idx)
-    #
-    #     samp = sc.to_sampler(flat=True, shuffle=False, batch_size=None, drop_last=False)
-    #     idx = [x for x in samp]
-    #     assert len(idx) == 12
-    #
-    #     samp = sc.to_sampler(flat=True, shuffle=False, batch_size=2, drop_last=False)
-    #     idx = [x for x in samp]
-    #     assert len(idx) == 6
-    #     assert all(len(x) == 2 for x in idx)
-    #
-    #     samp = sc.to_sampler(flat=True, shuffle=False, batch_size=5, drop_last=True)
-    #     idx = [x for x in samp]
-    #     assert len(idx) == 2
-    #     assert all(len(x) == 5 for x in idx)
-    #
-    # def test_sampler_integration(self):
-    #     from torch.utils.data import DataLoader
-    #     import torch
-    #
-    #     sc = Score.from_stop([3, 6, 9, 12])
-    #     x = torch.randn(sc.span, 32)
-    #
-    #     # FLAT
-    #     samp = sc.to_sampler(flat=True, shuffle=False, batch_size=5, drop_last=True)
-    #     dl = DataLoader(x, batch_sampler=samp, collate_fn=torch.stack)
-    #
-    #     batches = [b for b in dl]
-    #     assert len(batches) == 2
-    #     assert all(x.shape == (5, 32) for x in batches)
-    #
-    #     # HIERARCHICAL
-    #     samp = sc.to_sampler(flat=False, shuffle=False, batch_size=2, drop_last=True)
-    #     dl = DataLoader(x, batch_sampler=samp, collate_fn=torch.stack)
-    #
-    #     batches = [b for b in dl]
-    #     assert len(batches) == 2
-    #     assert all(x.shape == (2, 3, 32) for x in batches)
-
     def test_queries(self):
         sc = Score.from_stop([3, 6, 9, 12])
         sc.add_params(stretch=[1., 2., 1., 2.],

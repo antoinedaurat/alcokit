@@ -60,7 +60,7 @@ def DefaultHP(**kwargs):
         name="model",
         version="v0",
         overwrite=False,
-        era_duration=30.
+        era_duration=30. * 60
     )
     defaults.update(kwargs)
     return defaults

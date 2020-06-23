@@ -55,7 +55,7 @@ class TestScore(unittest.TestCase):
 
         sc = Score.from_stop([3, 6, 9, 12])
         sc.add_params(stretch=[1., 2., 1., 2.],
-                          shift=[1., -1., 1., -1.])
+                      shift=[1., -1., 1., -1.])
         assert "stretch" in sc.columns
         assert "shift" in sc.columns
 
@@ -83,7 +83,6 @@ class TestScore(unittest.TestCase):
         assert sc.is_consistent()
 
     def test_shift(self):
-
         # SPAN DESTRUCTIVE / CHAIN CONSERVING SHIFTS
 
         sc = Score.from_stop([3, 6, 9, 12])
@@ -146,7 +145,7 @@ class TestScore(unittest.TestCase):
     def test_queries(self):
         sc = Score.from_stop([3, 6, 9, 12])
         sc.add_params(stretch=[1., 2., 1., 2.],
-                          shift=[1., -1., 1., -1.])
+                      shift=[1., -1., 1., -1.])
 
         subset = sc.hard_q.or_(stretch=lambda s: s > 1.,
                                shift=lambda s: s > 0)

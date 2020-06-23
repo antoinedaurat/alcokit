@@ -137,7 +137,7 @@ def create_datasets_from_defs(target, defs, mode="w"):
             f.create_dataset(name, shape=params["shape"], dtype=params["dtype"])
             layout = params["layout"]
             layout.reset_index(drop=False, inplace=True)
-            layout.rename(columns={"index": "name"})
+            layout = layout.rename(columns={"index": "name"})
             pd.DataFrame(layout).to_hdf(target, "layouts/" + name, "r+")
         f.close()
     return
@@ -149,7 +149,7 @@ def make_integration_args(target):
         for feature in f["layouts"].keys():
             df = Score(pd.read_hdf(target, "layouts/" + feature))
             args += [(target, source, feature, indices) for source, indices in
-                     zip(df.index, df.slices(time_axis=0))]
+                     zip(df.name, df.slices(time_axis=0))]
     return args
 
 
@@ -167,14 +167,13 @@ def aggregate_dbs(target, dbs, mode="w", remove_sources=False):
     definitions = ds_definitions_from_infos(infos)
     create_datasets_from_defs(target, definitions, mode)
     args = make_integration_args(target)
-    for arg in args:
-        integrate(*arg)
+    for arg in args: integrate(*arg)
     if remove_sources:
         for src in dbs: os.remove(src)
     infos.to_hdf(target, "info", "r+")
     score.to_hdf(target, "score", "r+")
 
 
-def make_root_db(db_name, root_directory, extension_filter, extract_func, n_cores=cpu_count(), remove_sources=True):
+def make_root_db(db_name, root_directory, extension_filter, extract_func=default_extract_func, n_cores=cpu_count(), remove_sources=True):
     dbs = make_db_for_each_file(root_directory, extract_func, extension_filter, n_cores)
     aggregate_dbs(db_name, dbs, "w", remove_sources)

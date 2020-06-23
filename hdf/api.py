@@ -16,7 +16,8 @@ class FeatureProxy(ScoredSourceMixin):
 
     @property
     def cat(self):
-        return partial(np.concatenate, axis=1)  # getitem transposes !!
+        # getitem transposes !!
+        return self._constructor(partial(np.concatenate, axis=1))
 
     @property
     def stack(self):

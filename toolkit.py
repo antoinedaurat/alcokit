@@ -10,6 +10,7 @@ from cafca.learn import Model, DefaultHP, DEVICE, numcpu, to_torch
 from cafca.learn.modules import Pass, ParamedSampler, Abs
 from cafca.learn.losses import weighted_L1
 from cafca.learn.data import load
+from cafca.score import Score
 
 from cafca.transform.time import stretch
 from cafca.transform.pitch import shift, steps2rate as s2r

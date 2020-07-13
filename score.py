@@ -172,7 +172,7 @@ class Score(pd.DataFrame):
 
         def _as_stops(sp_def, duration):
             if getattr(sp_def, "__iter__", False):
-                return np.asarray(list(set(sp_def) | {duration}))
+                return np.asarray(sorted(list(set(sp_def) | {duration})))
             elif type(sp_def) is int:
                 eq_n = [duration // sp_def] * sp_def
                 eq_n[-1] += duration % sp_def
@@ -354,7 +354,7 @@ class SoftQueryAccessor:
         self._df = pandas_obj
 
     def or_(self, **kwargs):
-        series = True
+        series = False
         for col_name, func in kwargs.items():
             series = series | func(self._df[col_name])
         return series

@@ -106,7 +106,7 @@ class OpenedDS(DSBase):
 
     def __getitem__(self, event):
         array = get_event(self.ds, event, self.shift)
-        return torch.from_numpy(array).to(self.device)
+        return torch.from_numpy(array)
 
 
 class TensorSource(DSBase):

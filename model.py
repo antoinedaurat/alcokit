@@ -80,6 +80,12 @@ class ConvBlock(nn.Module):
         return rf
 
 
+class PermuteTimeFreq(nn.Module):
+
+    def forward(self, x):
+        return permute_time_freq(x)
+
+
 class ConvolutionNetwork(nn.Sequential):
     def __init__(self, dim, symmetrical=False, core=ParamedSampler, **conv_blocks_kwargs):
         if symmetrical:
@@ -87,7 +93,9 @@ class ConvolutionNetwork(nn.Sequential):
                 conv_blocks_kwargs.pop("down")
             super(ConvolutionNetwork, self).__init__(
                 ConvBlock(dim, **conv_blocks_kwargs, down=True),
+                PermuteTimeFreq(),
                 ParamedSampler(dim, dim, return_params=False),
+                PermuteTimeFreq(),
                 ConvBlock(dim, **conv_blocks_kwargs, down=False)
             )
         else:
@@ -158,7 +166,7 @@ class AutoRegressiveModel(Model):
                  database=None,
                  train_set=None,
                  optim_kwargs=dict(lr=1e-3, betas=(.9, .9)),
-                 epoch_restart=True,
+                 epoch_restart=False,
                  scheduler_kwargs=dict(max_lr=1e-3, div_factor=3., final_div_factor=1, pct_start=.25,
                                        cycle_momentum=False, epochs=100),
                  loss_fn=mean_L1_prop,

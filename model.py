@@ -4,6 +4,7 @@ from cafca.learn import Model
 from cafca.learn.data import load
 from cafca.learn.sequencer_v1 import Seq2SeqLSTM
 from cafca.hdf.api import Database
+from cafca.learn.modules import ParamedSampler
 import torch.optim as optim
 from torch.optim.lr_scheduler import OneCycleLR
 
@@ -80,13 +81,13 @@ class ConvBlock(nn.Module):
 
 
 class ConvolutionNetwork(nn.Sequential):
-    def __init__(self, dim, symmetrical=False, core=nn.Identity(), **conv_blocks_kwargs):
+    def __init__(self, dim, symmetrical=False, core=ParamedSampler, **conv_blocks_kwargs):
         if symmetrical:
             if "down" in conv_blocks_kwargs:
                 conv_blocks_kwargs.pop("down")
             super(ConvolutionNetwork, self).__init__(
                 ConvBlock(dim, **conv_blocks_kwargs, down=True),
-                core,
+                ParamedSampler(dim, dim, return_params=False),
                 ConvBlock(dim, **conv_blocks_kwargs, down=False)
             )
         else:

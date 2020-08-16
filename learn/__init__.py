@@ -60,7 +60,7 @@ def DefaultHP(**kwargs):
         name="model",
         version="v0",
         overwrite=False,
-        era_duration=30. * 60
+        era_duration=5
     )
     defaults.update(kwargs)
     return defaults
@@ -115,29 +115,20 @@ class Model(pl.LightningModule):
         self.ep_losses = []
         self.losses = []
         self.start_time = time()
-        self.last_era_time = time()
-        self.ep_since_era = 0
-
+       
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
         loss = self.loss_fn(batch, output)
         self.ep_losses += [loss.item()]
         return {"loss": loss}
 
-    def on_era_end(self):
-        pass
-
     def on_epoch_end(self):
         ep_loss = sum(self.ep_losses) / len(self.ep_losses)
         self.losses += [ep_loss]
         self.ep_losses = []
         self.ep_bar.update()
-        self.ep_since_era += 1
-        now = time()
-        if now - self.last_era_time >= self.era_duration:
+        if self.current_epoch % self.era_duration == 0:
             self._save_state("epoch=%i.ckpt" % self.current_epoch)
-            self.on_era_end()
-            self.last_era_time = now
         print("Epoch: %i - Loss: %.4f" % (self.current_epoch, self.losses[-1]))
 
     def on_train_end(self):

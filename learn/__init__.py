@@ -74,8 +74,7 @@ class Model(pl.LightningModule):
 
     def __init__(self, **kwargs):
         super(Model, self).__init__()
-        self.hparams = DefaultHP()
-        self.hparams.update(kwargs)
+        self.hparams = DefaultHP(**kwargs)
         for k, v in self.hparams.items():
             setattr(self, k, v)
 
@@ -90,9 +89,23 @@ class Model(pl.LightningModule):
         hp = torch.load(version_dir + "hparams.pt")
         hp["overwrite"] = False
         instance = clazz(**hp)
-        sd = torch.load(version_dir + ("epoch=%i.ckpt" % epoch if epoch is not None else "final.ckpt"))
+        sd = torch.load(version_dir + ("epoch=%i.ckpt" % epoch if epoch is not None else "final.ckpt"), map_location=DEVICE)
         instance.load_state_dict(sd)
         return instance
+
+    def restore_trainer(self):
+        optimizers = sorted([file for file in os.listdir(self.path) if "optimizer" in file])
+        optimizers = [torch.load(file) for file in optimizers]
+        checkpoint = {
+            "optimizer_states": [optimizers],
+            "lr_schedulers": [],
+            "global_step": 0,
+            "epoch": 0
+        }
+        trainer = self.get_trainer()
+        trainer.optimizers, trainer.lr_schedulers, _ = trainer.init_optimizers(self)
+        trainer.restore_training_state(checkpoint)
+        return trainer
 
     def on_train_start(self):
         self.init_directories()
@@ -125,10 +138,12 @@ class Model(pl.LightningModule):
             self._save_state("epoch=%i.ckpt" % self.current_epoch)
             self.on_era_end()
             self.last_era_time = now
+        print("Epoch: %i - Loss: %.4f" % (self.current_epoch, self.losses[-1]))
 
     def on_train_end(self):
         self._save_state("final.ckpt")
         self._save_loss()
+        self._save_optimizers()
         total_time = gmtime(time() - self.start_time)
         print("Training finished after {0} days {1} hours {2} mins {3} seconds".format(total_time[2] - 1, total_time[3],
                                                                                        total_time[4], total_time[5]))
@@ -142,6 +157,10 @@ class Model(pl.LightningModule):
     def _save_state(self, filename="state.ckpt"):
         torch.save(self.state_dict(), self.path + filename)
 
+    def _save_optimizers(self):
+        for i, opt in enumerate(self.trainer.optimizers):
+            torch.save(opt.state_dict(), self.path + "optimizer_" + str(i))
+
     def get_trainer(self, **kwargs):
         defaults = dict(gpus=1 if DEVICE.type == "cuda" else 0,
                         min_epochs=1,
@@ -154,6 +173,11 @@ class Model(pl.LightningModule):
                         )
         defaults.update(kwargs)
         return pl.Trainer(**defaults)
+
+    def configure_optimizers(self):
+        if self.trainer is not None and self.trainer.optimizers is not None \
+                and len(self.trainer.optimizers) >= 1:
+            return self.trainer.optimizers
 
     def init_directories(self):
         if not os.path.isdir(self.root_dir):

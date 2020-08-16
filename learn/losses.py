@@ -8,8 +8,9 @@ def weighted_L1(x, y, bias=1., dim=(0, -1)):
     return (feat_w * feat_l1).sum()
 
 
-def dot_loss(x, y):
-    return - (x * y).sum(axis=0).sum()
+def prop_L1(x, y):
+    L = nn.L1Loss(reduction="sum")(x, y)
+    return 100 * L / y.sum()
 
 
 def cos_loss(x, y):

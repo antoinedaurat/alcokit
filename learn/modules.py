@@ -135,7 +135,7 @@ class ParamedSampler(nn.Module):
         std = logvar.mul(0.5).exp_()
         eps = torch.randn(*mu.size(), device=self.get_device())
         z = mu + std * eps
-        return z, mu, logvar
+        return z, mu, std
 
     def get_device(self):
         return next(self.parameters()).device.type

@@ -74,16 +74,13 @@ class ConvBlock(nn.Module):
 
     def receptive_field(self):
         modules = self.block if isinstance(self.block, TimeResidualBlock) else list(self.block.children())
-        rf = modules[0].kernel * max([modules[0].dilation, modules[0].stride])
+        rf = modules[0].kernel
         for cv in modules[1:]:
-            rf += (cv.kernel - 1) * max([cv.dilation, cv.stride])
+            if cv.stride == cv.kernel:
+                rf *= (cv.kernel - 1) * cv.stride
+            else:
+                rf += (cv.kernel - 1) * cv.dilation
         return rf
-
-
-class PermuteTimeFreq(nn.Module):
-
-    def forward(self, x):
-        return permute_time_freq(x)
 
 
 class ConvolutionNetwork(nn.Sequential):
@@ -93,9 +90,7 @@ class ConvolutionNetwork(nn.Sequential):
                 conv_blocks_kwargs.pop("down")
             super(ConvolutionNetwork, self).__init__(
                 ConvBlock(dim, **conv_blocks_kwargs, down=True),
-                PermuteTimeFreq(),
                 ParamedSampler(dim, dim, return_params=False),
-                PermuteTimeFreq(),
                 ConvBlock(dim, **conv_blocks_kwargs, down=False)
             )
         else:

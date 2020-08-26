@@ -6,7 +6,6 @@ from multiprocessing import cpu_count, Pool
 from alcokit.util import fs_dict, is_audio_file
 from alcokit.hdf.api import Database
 from alcokit.score import Score
-from alcokit.extract import default_extract_func
 import logging
 
 logger = logging.getLogger()
@@ -14,6 +13,12 @@ logger.setLevel(logging.INFO)
 
 
 # TODO : add handling of sparse matrices ?
+
+def default_extract_func(abs_path):
+    from alcokit.fft import FFT
+    fft = abs(FFT.stft(abs_path))
+    score = Score.from_recurrence_matrix(fft)
+    return dict(fft=({}, fft.T), score=({}, score))
 
 
 def sizeof_fmt(num, suffix='b'):

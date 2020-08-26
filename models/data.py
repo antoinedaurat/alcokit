@@ -2,8 +2,8 @@ import torch
 from torch.utils.data import Sampler, BatchSampler, Dataset, DataLoader
 import numpy as np
 import h5py
-from cafca.hdf.api import FeatureProxy
-from cafca.sources import ScoredSourceMixin, NPSource
+from alcokit.hdf.api import FeatureProxy
+from alcokit.sources import ScoredSourceMixin, NPSource
 
 
 class FlatSampler(Sampler):

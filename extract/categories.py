@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import rv_histogram
 from scipy.ndimage import generic_filter
-from cafca.transform.spectrum import frame
+from alcokit.transform.spectrum import frame
 
 
 # Low level functions

@@ -2,7 +2,7 @@ from functools import partial
 import torch
 import numpy as np
 import pandas as pd
-from cafca.score import Score
+from alcokit.score import Score
 
 
 class ScoredSourceMixin(object):
@@ -118,29 +118,3 @@ class NPSource(np.ndarray, ScoredSourceMixin):
     @property
     def stack(self):
         return np.stack
-
-
-class TorchSource(torch.Tensor, ScoredSourceMixin):
-    @staticmethod
-    def __new__(cls, x, *args, **kwargs):
-        return super().__new__(cls, x, *args, **kwargs)
-
-    def __init__(self, *args, **kwargs):
-        super(TorchSource, self).__init__()
-
-    def __getitem__(self, item):
-        if type(item) is pd.Series:
-            return TorchSource(super(TorchSource, self).__getitem__(slice(item.start, item.stop)))
-        elif type(item) is pd.DataFrame:
-            return TorchSource(super(TorchSource, self).__getitem__(item.i.slices))
-        else:
-            return TorchSource(super(TorchSource, self).__getitem__(item))
-
-    def clone(self, *args, **kwargs):
-        return TorchSource(super().clone(*args, **kwargs))
-
-    def to(self, *args, **kwargs):
-        new_obj = TorchSource([])
-        tempTensor = super().to(*args, **kwargs)
-        new_obj.data = tempTensor.data
-        return new_obj

@@ -1,7 +1,7 @@
-from cafca.learn.data import *
-from cafca.hdf.factory import file_to_db
-from cafca.hdf.api import Database
-from cafca.score import Score
+from alcokit.models.data import *
+from alcokit.hdf.factory import file_to_db
+from alcokit.hdf.api import Database
+from alcokit.score import Score
 import unittest
 import os
 

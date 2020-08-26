@@ -4,17 +4,17 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from cafca.hdf.api import Database
-from cafca.util import audio, playlist, playthrough, show
-from cafca.learn import Model, DefaultHP, DEVICE, numcpu, to_torch
-from cafca.learn.modules import Pass, ParamedSampler, Abs
-from cafca.learn.losses import weighted_L1
-from cafca.learn.data import load
-from cafca.score import Score
+from alcokit.hdf.api import Database
+from alcokit.util import audio, playlist, playthrough, show
+from alcokit.models import Model, DefaultHP, DEVICE, numcpu, to_torch
+from alcokit.models.modules import Pass, ParamedSampler, Abs
+from alcokit.models.losses import weighted_L1
+from alcokit.models.data import load
+from alcokit.score import Score
 
-from cafca.transform.time import stretch
-from cafca.transform.pitch import shift, steps2rate as s2r
+from alcokit.transform.time import stretch
+from alcokit.transform.pitch import shift, steps2rate as s2r
 
-from cafca.algos import *
+from alcokit.algos import *
 
 

@@ -1,7 +1,8 @@
-from cafca.util import normalize, m2hz
+from alcokit.util import normalize, m2hz
 import numpy as np
 import torch
-import torch.nn as nn
+
+# WIP
 
 
 def spectra(S, midi_pitches,
@@ -40,33 +41,6 @@ def spectra(S, midi_pitches,
     d *= np.exp(- ratios * (1 / decay_len))
     d = normalize(d, axis=1)
     return d
-
-
-def mse_loss(x, y):
-    return nn.MSELoss(reduction="none")(x, y).sum()
-
-
-def cos_loss(x, y):
-    numerator = (x * y).sum(axis=0)
-    denominator = torch.norm(x, p=2, dim=0) * torch.norm(y, p=2, dim=0)
-    if y.sum() == 0:
-        out = (1 - numerator / torch.norm(x, p=2, dim=0))
-    else:
-        out = (1 - numerator / denominator)
-    return out
-
-
-def euclidean_loss(x, y):
-    out = torch.sqrt(((x - y) ** 2).mean(axis=0))
-    return out.sum()
-
-
-def estimate_instrument(I, Y, S):
-    pass
-
-
-# def optimize_instrument_hyperparameters(Y, loss_fn):
-#     pass
 
 
 def update_score(y, instrument, score, loss_fn, loss_t):

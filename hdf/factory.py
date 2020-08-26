@@ -3,10 +3,10 @@ import numpy as np
 import pandas as pd
 import os
 from multiprocessing import cpu_count, Pool
-from cafca.util import fs_dict, is_audio_file
-from cafca.hdf.api import Database
-from cafca.score import Score
-from cafca.extract import default_extract_func
+from alcokit.util import fs_dict, is_audio_file
+from alcokit.hdf.api import Database
+from alcokit.score import Score
+from alcokit.extract import default_extract_func
 import logging
 
 logger = logging.getLogger()

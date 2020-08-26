@@ -7,11 +7,11 @@ warnings.filterwarnings("ignore", message="The dataloader, train dataloader, doe
 # Constants
 # those are shared and imported everywhere. Having them here makes it easier
 # to set them once globally and forget about them, e.g.
-# import cafca
+# import alcokit
 #
-# cafca.HOP_LENGTH = 1234
+# alcokit.HOP_LENGTH = 1234
 #
-# from cafca import algo -> every stft, audio display etc. will have a default hop_length of 1234
+# from alcokit import algo -> every stft, audio display etc. will have a default hop_length of 1234
 
 N_FFT = 2048
 HOP_LENGTH = 512

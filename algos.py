@@ -6,8 +6,8 @@ from librosa.sequence import dtw
 from sklearn.decomposition import non_negative_factorization
 from sklearn.metrics import pairwise_distances
 
-from cafca.fft import FFT
-from cafca.util import t2f
+from alcokit.fft import FFT
+from alcokit.util import t2f
 
 
 def harmonic_percussive(S, margin=1):

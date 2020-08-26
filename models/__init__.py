@@ -8,7 +8,7 @@ import os
 import shutil
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("cafca initialized with device:", DEVICE)
+print("alcokit initialized with device:", DEVICE)
 
 
 # Array <==> Tensor ops :

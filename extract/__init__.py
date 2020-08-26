@@ -1,5 +1,5 @@
-from cafca.fft import FFT
-from cafca.score import Score
+from alcokit.fft import FFT
+from alcokit.score import Score
 
 
 def default_extract_func(abs_path):

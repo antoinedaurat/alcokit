@@ -1,5 +1,5 @@
-from cafca import SR, HOP_LENGTH
-from cafca.util import signal, f2s
+from alcokit import SR, HOP_LENGTH
+from alcokit.util import signal, f2s
 import numpy as np
 from librosa import resample, phase_vocoder, util, stft
 from pyrubberband.pyrb import pitch_shift as rb_shift

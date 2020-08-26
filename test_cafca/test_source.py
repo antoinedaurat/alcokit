@@ -1,8 +1,8 @@
 import unittest
-from cafca.sources import ScoredSourceMixin, NPSource, TorchSource
+from alcokit.sources import ScoredSourceMixin, NPSource, TorchSource
 import numpy as np
 import torch
-from cafca.score import Score
+from alcokit.score import Score
 
 
 class TestSources(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestSources(unittest.TestCase):
         # assert isinstance(ts[:, -1] * 8, TorchSource)
 
     def test_algos_on_arrays(self):
-        from cafca.algos import harmonic_percussive, REP_SIM
+        from alcokit.algos import harmonic_percussive, REP_SIM
         nps = NPSource(np.random.rand(256, 100))
         h, p = harmonic_percussive(nps)
 

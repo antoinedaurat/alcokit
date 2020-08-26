@@ -1,8 +1,8 @@
 import h5py
 import numpy as np
 import pandas as pd
-from cafca.score import Score
-from cafca.sources import ScoredSourceMixin, NPSource
+from alcokit.score import Score
+from alcokit.sources import ScoredSourceMixin, NPSource
 from functools import partial
 
 

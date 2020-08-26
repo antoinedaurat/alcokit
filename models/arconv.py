@@ -2,8 +2,8 @@ from torch.optim.lr_scheduler import StepLR
 import torch.nn as nn
 import torch.optim as optim
 import torch
-from cafca.learn.modules import ParamedSampler, Pass, Abs
-from cafca.learn import Model
+from alcokit.models.modules import ParamedSampler, Pass, Abs
+from alcokit.models import Model
 
 
 class GatedConv(nn.Module):

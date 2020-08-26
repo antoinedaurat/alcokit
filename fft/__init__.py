@@ -1,7 +1,7 @@
 import numpy as np
 import librosa
-from cafca import HOP_LENGTH, N_FFT, SR
-from cafca.util import db, show, audio, signal
+from alcokit import HOP_LENGTH, N_FFT, SR
+from alcokit.util import db, show, audio, signal
 
 
 class FFT(np.ndarray):

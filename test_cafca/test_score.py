@@ -1,5 +1,5 @@
 import numpy as np
-from cafca.score import Score
+from alcokit.score import Score
 import unittest
 
 

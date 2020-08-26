@@ -1,6 +1,6 @@
-from cafca import HOP_LENGTH, SR
-from cafca.transform.spectrum import griffinlim
-from cafca.util import signal
+from alcokit import HOP_LENGTH, SR
+from alcokit.transform.spectrum import griffinlim
+from alcokit.util import signal
 from librosa import stft, phase_vocoder
 import numpy as np
 from pyrubberband.pyrb import time_stretch as rb_stretch

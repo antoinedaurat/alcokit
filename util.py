@@ -4,7 +4,7 @@ import os
 from librosa.display import specshow
 import matplotlib.pyplot as plt
 import IPython.display as ipd
-from cafca import HOP_LENGTH, SR, N_FFT
+from alcokit import HOP_LENGTH, SR, N_FFT
 import pickle
 
 
@@ -76,13 +76,6 @@ def delta_b(b, delta_m=1, sr=SR, n_fft=N_FFT):
 
 def unit_scale(x):
     return (x - x.min()) / (x.max() - x.min())
-
-
-# Useful formulas
-
-def logistic_map(X, thresh=.1, strength=20):
-    y = X - thresh
-    return 1 / (1 + np.exp(- y * strength))
 
 
 # Debugging utils

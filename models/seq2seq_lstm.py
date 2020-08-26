@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from cafca.learn.modules import ParamedSampler, Pass
-from cafca.learn.losses import weighted_L1
-from cafca.learn import Model
+from alcokit.models.modules import ParamedSampler, Pass
+from alcokit.models.losses import weighted_L1
+from alcokit.models import Model
 
 
 class EncoderLSTM(nn.Module):
@@ -80,61 +80,3 @@ class Seq2SeqLSTM(nn.Module):
         coded = coded + residuals
         output, (_, _) = self.dec(coded, h_enc, c_enc)
         return output
-
-
-class Sequencer(Model):
-
-    def __init__(self,
-                 # instance
-                 root_dir="test_model/",
-                 name="sequencer",
-                 version="v0",
-                 overwrite=False,
-
-                 # module
-                 input_d=1025,
-                 h=512,
-                 num_layers=1,
-                 bottleneck="add",
-                 n_fc=1,
-                 loss_fn=weighted_L1,
-
-                 # training
-                 batch_size=16,
-                 inpt_len=8,
-                 trgt_len=8,
-                 lr=1e-4,
-                 max_epochs=8192,
-                 **kwargs):
-        args_d = dict(root_dir=root_dir, name=name, version=version, overwrite=overwrite,
-                      input_d=input_d, h=h, num_layers=num_layers, bottleneck=bottleneck, n_fc=n_fc, loss_fn=loss_fn,
-                      batch_size=batch_size, inpt_len=inpt_len, trgt_len=trgt_len, lr=lr, max_epochs=max_epochs)
-        # Model creates object's attributes for each keyword param
-        super(Sequencer, self).__init__(**args_d, **kwargs)
-
-        # modules
-        self.enc = EncoderLSTM(self.input_d, self.h, self.num_layers, self.bottleneck, self.n_fc)
-        self.dec = DecoderLSTM(self.h, self.num_layers, self.bottleneck)
-        self.sampler = ParamedSampler(self.h, self.h, pre_activation=Pass)
-        self.sampler_out = ParamedSampler(self.h, self.input_d, pre_activation=Pass)
-
-    def forward(self, x):
-        coded, (h_enc, c_enc) = self.enc(x)
-        coded = coded.unsqueeze(1).repeat(1, self.trgt_len, 1)
-        residuals, mu, logvar = self.sampler(coded)
-        coded = coded + residuals
-        output, (h_dec, c_dec) = self.dec(coded, h_enc, c_enc)
-        output = self.sampler_out(output)[0]
-        output = output.abs()
-        return output, (h_enc, c_enc), (h_dec, c_dec)
-
-    def training_step(self, batch, batch_idx):
-        inpt, trgt = batch
-        output, _, _ = self.forward(inpt)
-        L = sum(self.loss_fn(x.T, y.T) / x.size(0) for x, y in zip(trgt, output))
-        L /= len(batch)
-        self.ep_losses += [L.item()]
-        return {"loss": L}
-
-    def configure_optimizers(self):
-        return optim.RMSprop(self.parameters(), lr=self.lr)

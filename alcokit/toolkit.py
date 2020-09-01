@@ -12,6 +12,6 @@ from alcokit.score import Score
 from alcokit.transform.time import stretch
 from alcokit.transform.pitch import shift, steps2rate as s2r
 
-from alcokit.alcokit.algos import *
+from alcokit.algos import *
 
 

@@ -8,7 +8,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="alcokit",
-    version="0.0.11",
+    version="0.0.13",
     author="Antoine Daurat",
     author_email="antoinedaurat@gmail.com",
     description="package to do MIR and learn generative models on top of librosa and pytorch",
